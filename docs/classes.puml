@@ -1,0 +1,95 @@
+@startuml
+skinparam classAttributeIconSize 0
+
+class Usuario {
+    +id: String
+    +nome: String
+    +email: String
+    +senhaHash: String
+    +perfil: PerfilEnum
+    +login()
+    +logout()
+}
+
+enum PerfilEnum {
+    ADMIN
+    COORDENACAO
+    ORIENTADOR
+    ALUNO
+    AVALIADOR
+}
+
+class Aluno {
+    +matricula: String
+    +submeterTrabalho()
+    +alterarStatusEntrega()
+}
+
+class ProfessorOrientador {
+    +revisarEntrega()
+    +enviarParaBanca()
+}
+
+class ProfessorAvaliador {
+    +avaliarTrabalho()
+}
+
+class Coordenador {
+    +cadastrarCronograma()
+    +vincularOrientador()
+    +trocarOrientador()
+}
+
+class TCC {
+    +id: String
+    +titulo: String
+    +statusGeral: String
+    +versaoFinalUrl: String
+}
+
+class MarcoCronograma {
+    +id: String
+    +titulo: String
+    +dataLimite: Date
+}
+
+class Entrega {
+    +id: String
+    +status: String
+    +dataSubmissao: Date
+}
+
+class VersaoArquivo {
+    +id: String
+    +numeroVersao: Integer
+    +arquivoUrl: String
+    +dataUpload: Date
+}
+
+class Feedback {
+    +id: String
+    +comentario: String
+    +data: Date
+}
+
+class Notificacao {
+    +id: String
+    +mensagem: String
+    +lida: Boolean
+}
+
+Usuario <|-- Aluno
+Usuario <|-- ProfessorOrientador
+Usuario <|-- ProfessorAvaliador
+Usuario <|-- Coordenador
+
+Aluno "1" -- "1" TCC : possui >
+TCC "1" -- "*" MarcoCronograma : contem >
+MarcoCronograma "1" -- "1" Entrega : gera >
+Entrega "1" -- "*" VersaoArquivo : possui >
+Entrega "1" -- "*" Feedback : recebe >
+ProfessorOrientador "1" -- "*" Aluno : orienta >
+ProfessorAvaliador "*" -- "*" TCC : avalia >
+Usuario "1" -- "*" Notificacao : recebe >
+
+@enduml

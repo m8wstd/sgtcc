@@ -1,0 +1,122 @@
+@startuml
+skinparam linetype ortho
+
+entity "Usuario" as Usuario {
+    * id : String <<PK>>
+    --
+    nome : String
+    email : String
+    senhaHash : String
+    perfil : String
+}
+
+entity "Aluno" as Aluno {
+    * matricula : String <<PK>>
+    --
+    * usuario_id : String <<FK>>
+}
+
+entity "ProfessorOrientador" as ProfessorOrientador {
+    * id : String <<PK>>
+    --
+    * usuario_id : String <<FK>>
+}
+
+entity "ProfessorAvaliador" as ProfessorAvaliador {
+    * id : String <<PK>>
+    --
+    * usuario_id : String <<FK>>
+}
+
+entity "Coordenador" as Coordenador {
+    * id : String <<PK>>
+    --
+    * usuario_id : String <<FK>>
+}
+
+entity "TCC" as TCC {
+    * id : String <<PK>>
+    --
+    titulo : String
+    statusGeral : String
+    versaoFinalUrl : String
+    * aluno_id : String <<FK>>
+    * orientador_id : String <<FK>>
+}
+
+entity "Cronograma" as Cronograma {
+    * id : String <<PK>>
+    --
+    semestre : String
+}
+
+entity "MarcoCronograma" as MarcoCronograma {
+    * id : String <<PK>>
+    --
+    titulo : String
+    dataLimite : Date
+    * cronograma_id : String <<FK>>
+}
+
+entity "Entrega" as Entrega {
+    * id : String <<PK>>
+    --
+    status : String
+    dataSubmissao : Date
+    * marco_id : String <<FK>>
+    * tcc_id : String <<FK>>
+}
+
+entity "VersaoArquivo" as VersaoArquivo {
+    * id : String <<PK>>
+    --
+    numeroVersao : Integer
+    arquivoUrl : String
+    dataUpload : Date
+    * entrega_id : String <<FK>>
+}
+
+entity "Feedback" as Feedback {
+    * id : String <<PK>>
+    --
+    comentario : String
+    data : Date
+    * entrega_id : String <<FK>>
+    * autor_id : String <<FK>>
+}
+
+entity "BancaAvaliacao" as BancaAvaliacao {
+    * id : String <<PK>>
+    --
+    * tcc_id : String <<FK>>
+    * avaliador_id : String <<FK>>
+}
+
+entity "Notificacao" as Notificacao {
+    * id : String <<PK>>
+    --
+    mensagem : String
+    lida : Boolean
+    * usuario_id : String <<FK>>
+}
+
+Usuario ||--o{ Aluno : "é"
+Usuario ||--o{ ProfessorOrientador : "é"
+Usuario ||--o{ ProfessorAvaliador : "é"
+Usuario ||--o{ Coordenador : "é"
+Usuario ||--{ Notificacao : "recebe"
+
+Aluno ||--|| TCC : "possui"
+ProfessorOrientador ||--o{ TCC : "orienta"
+
+Cronograma ||--{ MarcoCronograma : "contém"
+TCC ||--{ Entrega : "gera"
+MarcoCronograma ||--{ Entrega : "possui"
+
+Entrega ||--{ VersaoArquivo : "contém"
+Entrega ||--{ Feedback : "recebe"
+
+TCC ||--o{ BancaAvaliacao : "possui"
+ProfessorAvaliador ||--o{ BancaAvaliacao : "participa"
+
+@enduml
