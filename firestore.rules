@@ -1,0 +1,171 @@
+rules_version = '2';
+
+// SGTCC - Regras de seguranca do Cloud Firestore
+// Principio: so aluno, orientador atual e banca do TCC (alem de coordenacao/admin)
+// acessam os dados de um TCC (RNF03, US01-AC3).
+// Escritas "de sistema" (notificacoes, importacao em lote, troca de orientador)
+// sao feitas pelo Admin SDK (Server Actions), que ignora estas regras.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Funcoes auxiliares ----------
+    function logado() {
+      return request.auth != null;
+    }
+
+    function perfil() {
+      return request.auth.token.get('perfil', '');
+    }
+
+    function ehStaff() {
+      return logado() && (perfil() == 'COORDENACAO' || perfil() == 'ADMIN');
+    }
+
+    function tccDoc(tccId) {
+      return get(/databases/$(database)/documents/tccs/$(tccId)).data;
+    }
+
+    function entregaDoc(entregaId) {
+      return get(/databases/$(database)/documents/entregas/$(entregaId)).data;
+    }
+
+    function ehAlunoDoTcc(tcc) {
+      return logado() && tcc.aluno_id == request.auth.token.get('matricula', '');
+    }
+
+    function ehOrientadorDoTcc(tcc) {
+      return logado() && tcc.orientador_id == request.auth.uid;
+    }
+
+    function ehAvaliadorDoTcc(tcc) {
+      return logado() && request.auth.uid in tcc.get('avaliadoresUids', []);
+    }
+
+    function participaDoTcc(tcc) {
+      return ehStaff()
+        || ehAlunoDoTcc(tcc)
+        || ehOrientadorDoTcc(tcc)
+        || ehAvaliadorDoTcc(tcc);
+    }
+
+    function soMudou(campos) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos);
+    }
+
+    // ---------- Usuarios e papeis ----------
+    match /usuarios/{uid} {
+      allow read: if logado() && (request.auth.uid == uid || ehStaff() || perfil() == 'ORIENTADOR');
+      allow write: if ehStaff();
+    }
+
+    match /alunos/{matricula} {
+      allow read: if logado() && (
+        resource.data.usuario_id == request.auth.uid
+        || ehStaff()
+        || perfil() == 'ORIENTADOR');
+      allow write: if ehStaff();
+    }
+
+    match /professores_orientadores/{id} {
+      allow read: if logado();
+      allow write: if ehStaff();
+    }
+
+    match /professores_avaliadores/{id} {
+      allow read: if logado();
+      allow write: if ehStaff();
+    }
+
+    match /coordenadores/{id} {
+      allow read: if ehStaff();
+      allow write: if perfil() == 'ADMIN';
+    }
+
+    // ---------- Cronograma ----------
+    match /cronogramas/{id} {
+      allow read: if logado();
+      allow write: if ehStaff();
+    }
+
+    match /marcos_cronograma/{id} {
+      allow read: if logado();
+      allow write: if ehStaff();
+    }
+
+    // ---------- TCC ----------
+    match /tccs/{id} {
+      allow read: if participaDoTcc(resource.data);
+      // criacao, troca de orientador e banca: coordenacao/admin
+      allow create, update: if ehStaff();
+      allow delete: if false; // RN02: historico imutavel
+    }
+
+    // ---------- Banca ----------
+    match /bancas_avaliacao/{id} {
+      allow read: if ehStaff()
+        || (logado() && resource.data.avaliador_id == request.auth.uid)
+        || ehOrientadorDoTcc(tccDoc(resource.data.tcc_id));
+      allow write: if ehStaff();
+    }
+
+    // ---------- Entregas ----------
+    match /entregas/{id} {
+      allow read: if participaDoTcc(tccDoc(resource.data.tcc_id));
+
+      // aluno ou staff abre a entrega do proprio TCC
+      allow create: if ehStaff() || ehAlunoDoTcc(tccDoc(request.resource.data.tcc_id));
+
+      // Aluno: so marca "PRONTA_PARA_REVISAO" (US05)
+      // Orientador atual: pede correcao ou conclui (US06). A regra US13
+      // (nao concluir sem envio) e validada na Server Action.
+      allow update: if
+        (ehAlunoDoTcc(tccDoc(resource.data.tcc_id))
+          && soMudou(['status', 'dataSubmissao'])
+          && request.resource.data.status == 'PRONTA_PARA_REVISAO')
+        || (ehOrientadorDoTcc(tccDoc(resource.data.tcc_id))
+          && soMudou(['status'])
+          && request.resource.data.status in ['SOLICITADA_CORRECAO', 'CONCLUIDA'])
+        || ehStaff();
+
+      allow delete: if false;
+    }
+
+    // ---------- Versoes de arquivo (imutaveis) ----------
+    match /versoes_arquivo/{id} {
+      allow read: if participaDoTcc(tccDoc(entregaDoc(resource.data.entrega_id).tcc_id));
+
+      // Aluno envia nova versao ate o prazo do marco (US03, US09)
+      allow create: if ehAlunoDoTcc(tccDoc(entregaDoc(request.resource.data.entrega_id).tcc_id))
+        && request.time < get(/databases/$(database)/documents/marcos_cronograma/$(entregaDoc(request.resource.data.entrega_id).marco_id)).data.dataLimite;
+
+      allow update, delete: if false; // US03-AC2: nunca sobrescrever
+    }
+
+    // ---------- Feedbacks (imutaveis) ----------
+    match /feedbacks/{id} {
+      allow read: if participaDoTcc(tccDoc(entregaDoc(resource.data.entrega_id).tcc_id));
+
+      // So o orientador ATUAL do TCC comenta, como ele mesmo (RN02, US04-AC2)
+      allow create: if request.resource.data.autor_id == request.auth.uid
+        && ehOrientadorDoTcc(tccDoc(entregaDoc(request.resource.data.entrega_id).tcc_id));
+
+      allow update, delete: if false;
+    }
+
+    // ---------- Notificacoes ----------
+    match /notificacoes/{id} {
+      allow read: if logado() && resource.data.usuario_id == request.auth.uid;
+      // usuario so marca como lida; criacao e feita pelo servidor (Admin SDK)
+      allow update: if logado()
+        && resource.data.usuario_id == request.auth.uid
+        && soMudou(['lida']);
+      allow create, delete: if false;
+    }
+
+    // ---------- Qualquer outra coisa: bloqueado ----------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
