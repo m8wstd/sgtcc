@@ -99,7 +99,7 @@ export function CoordenacaoDashboardClient({
     );
     setModalTrocaOrientador(false);
     setNovoOrientadorNome("");
-    setAlertaSucesso("Orientador reatribuído com sucesso! Histórico acadêmico preservado (RN02).");
+    setAlertaSucesso("Orientador reatribuído com sucesso! Histórico acadêmico preservado.");
     setTimeout(() => setAlertaSucesso(null), 5000);
   };
 
@@ -200,7 +200,7 @@ export function CoordenacaoDashboardClient({
               <Settings className="w-5 h-5" />
             </div>
             <h3 className="text-xs font-bold text-[#111a2e] group-hover:text-[#1e78f0]">
-              Troca de Orientador (RN02)
+              Troca de Orientador
             </h3>
           </div>
           <p className="text-xs text-[#6b7385] leading-relaxed">
@@ -219,7 +219,7 @@ export function CoordenacaoDashboardClient({
             <div className="flex items-center gap-2">
               <Settings className="w-4 h-4 text-[#1e78f0]" />
               <h3 className="text-sm font-bold text-[#111a2e]">
-                Troca de Orientador com Preservação de Histórico (RN02)
+                Troca de Orientador com Preservação de Histórico
               </h3>
             </div>
             <button
@@ -267,7 +267,7 @@ export function CoordenacaoDashboardClient({
           </div>
 
           <p className="text-[11.5px] text-[#6b7385] bg-[#f4f5f7] p-3 rounded-lg">
-            <b>Regra RN02:</b> Caso o aluno mude de orientador, todas as entregas anteriores, comentários e arquivos já submetidos serão mantidos intactos e disponibilizados imediatamente para o novo docente.
+            <b>Política de Transição:</b> Caso o aluno mude de orientador, todas as entregas anteriores, comentários e arquivos já submetidos serão mantidos intactos e disponibilizados imediatamente para o novo docente.
           </p>
 
           <div className="flex justify-end gap-2 pt-2 border-t border-[#dfe2e8]">
@@ -338,7 +338,7 @@ export function CoordenacaoDashboardClient({
             <div className="flex items-center gap-2">
               <FileSpreadsheet className="w-4 h-4 text-[#1e78f0]" />
               <h3 className="text-sm font-bold text-[#111a2e]">
-                Alocação e Lotes Semestrais de Orientadores (RN01)
+                Alocação e Lotes Semestrais de Orientadores
               </h3>
             </div>
             <button

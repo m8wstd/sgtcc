@@ -181,7 +181,7 @@ export function AdminDashboardClient({ nomeUsuario }: { nomeUsuario: string }) {
         />
       </div>
 
-      {/* Diagnóstico Rápido do Sistema (RNF01 e RNF03) */}
+      {/* Diagnóstico Rápido do Sistema */}
       <div className="border border-[#dfe2e8] rounded-[10px] p-5 bg-white shadow-xs space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-bold text-[#111a2e] uppercase tracking-wider flex items-center gap-2">

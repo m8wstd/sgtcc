@@ -47,13 +47,13 @@ export function LoginForm({ destino, initialTab = "login" }: LoginFormProps) {
       const data = await res.json();
 
       if (!res.ok) {
-        // Mensagem exata exigida pelo critério US01 AC1
+        // Mensagem de erro padrão ao falhar o login
         setErro(data.message || "Credenciais inválidas ou usuário não encontrado.");
         setLoading(false);
         return;
       }
 
-      // Redirecionamento de perfil (US01 AC2)
+      // Redirecionamento de perfil
       router.push(destino && destino !== "/dashboard" ? destino : data.redirectTo || "/dashboard");
       router.refresh();
     } catch {
