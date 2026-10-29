@@ -6,7 +6,7 @@ export const HOME_POR_PERFIL: Record<PerfilEnum, string> = {
   [PerfilEnum.ORIENTADOR]: "/dashboard/orientador",
   [PerfilEnum.AVALIADOR]: "/dashboard/avaliador",
   [PerfilEnum.COORDENACAO]: "/dashboard/coordenacao",
-  [PerfilEnum.ADMIN]: "/dashboard/coordenacao",
+  [PerfilEnum.ADMIN]: "/dashboard/admin",
 };
 
 export const ROTULO_PERFIL: Record<PerfilEnum, string> = {
