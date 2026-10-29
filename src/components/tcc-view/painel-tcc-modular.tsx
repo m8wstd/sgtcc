@@ -39,39 +39,30 @@ export const COLUNAS_KANBAN = [
 
 export type ColunaKanbanKey = (typeof COLUNAS_KANBAN)[number]["key"];
 
+/**
+ * Regra de Negócio solicitada:
+ * - Pendente: etapas que ainda não foram começadas (AGUARDANDO_ENVIO ou ATRASADA sem versões)
+ * - Em andamento: etapas que estão sendo feitas pelo aluno
+ * - Para correção: quando o aluno envia o arquivo (PRONTA_PARA_REVISAO)
+ * - Em correção: quando o orientador marca que está corrigindo ou solicita correções (EM_REVISAO ou SOLICITADA_CORRECAO)
+ * - Concluído: etapas marcadas como concluídas (CONCLUIDA)
+ */
 export function mapStatusParaColuna(status: StatusEntrega): ColunaKanbanKey {
   switch (status) {
     case "AGUARDANDO_ENVIO":
     case "ATRASADA":
       return "Pendente";
-    case "PRONTA_PARA_REVISAO":
+    case "EM_ANDAMENTO" as any:
       return "Em andamento";
-    case "EM_REVISAO":
+    case "PRONTA_PARA_REVISAO":
       return "Para correção";
+    case "EM_REVISAO":
     case "SOLICITADA_CORRECAO":
       return "Em correção";
     case "CONCLUIDA":
       return "Concluído";
     default:
       return "Pendente";
-  }
-}
-
-export function progressoEstimadoPorStatus(status: StatusEntrega): number {
-  switch (status) {
-    case "AGUARDANDO_ENVIO":
-    case "ATRASADA":
-      return 0;
-    case "PRONTA_PARA_REVISAO":
-      return 50;
-    case "EM_REVISAO":
-      return 70;
-    case "SOLICITADA_CORRECAO":
-      return 40;
-    case "CONCLUIDA":
-      return 100;
-    default:
-      return 0;
   }
 }
 
@@ -112,7 +103,7 @@ export function PainelTccModular({
   const isOrientador = papel === "orientador";
   const [viewMode, setViewMode] = useState<"kanban" | "lista">("kanban");
 
-  // Estado dinâmico de etapas para permitir que o Orientador crie novas etapas
+  // Estado dinâmico de etapas
   const [itens, setItens] = useState<ItemMarco[]>(itensIniciais);
   const [mostrarCriarEtapa, setMostrarCriarEtapa] = useState(false);
   const [novoTituloEtapa, setNovoTituloEtapa] = useState("");
@@ -122,13 +113,10 @@ export function PainelTccModular({
 
   const totalMarcos = itens.length;
   const concluidos = itens.filter((i) => i.statusEfetivo === "CONCLUIDA").length;
+
+  // Conclusão GERAL do TCC (1 ou 2) = porcentagem de etapas concluídas no trabalho
   const porcentagemGeral =
-    totalMarcos > 0
-      ? Math.round(
-          itens.reduce((acc, i) => acc + progressoEstimadoPorStatus(i.statusEfetivo), 0) /
-            totalMarcos
-        )
-      : 0;
+    totalMarcos > 0 ? Math.round((concluidos / totalMarcos) * 100) : 0;
 
   const totalComentarios = itens.reduce((acc, i) => acc + i.feedbacks.length, 0);
 
@@ -328,13 +316,13 @@ export function PainelTccModular({
       {/* Stats Cards com as métricas do protótipo */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         <StatCard
-          label="Conclusão Geral"
+          label={`Conclusão Geral ${tcc.fase ? `(TCC ${tcc.fase})` : ""}`}
           value={`${porcentagemGeral}%`}
           variant="green"
           className="p-5"
         />
         <StatCard
-          label="Blocos Concluídos"
+          label="Etapas Concluídas"
           value={`${concluidos} de ${totalMarcos}`}
           variant="blue"
           className="p-5"
@@ -486,7 +474,6 @@ export function PainelTccModular({
                       const etapaHref = isOrientador
                         ? `/dashboard/tcc/${tcc.id}/etapa/${slug}`
                         : `/dashboard/aluno/etapa/${slug}`;
-                      const progresso = progressoEstimadoPorStatus(item.statusEfetivo);
                       const atrasado = item.statusEfetivo === "ATRASADA";
                       const ultimoFeedback = item.feedbacks[0]?.comentario ?? null;
 
@@ -510,13 +497,15 @@ export function PainelTccModular({
                             )}
                           </div>
 
-                          {/* Progresso do Bloco */}
-                          <ProgressBar value={progresso} className="h-1.5" />
-
-                          {/* Métricas do Bloco */}
+                          {/* Prazo Limite */}
                           <div className="flex justify-between items-center text-[11px] text-[#6b7385] font-medium">
-                            <span>{progresso}% concluído</span>
-                            <span>Prazo {formatarData(item.marco.dataLimite)}</span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              Prazo: {formatarData(item.marco.dataLimite)}
+                            </span>
+                            <span className="text-[10px] font-semibold text-[#1e78f0] bg-blue-50 px-1.5 py-0.5 rounded">
+                              {col.label}
+                            </span>
                           </div>
 
                           {/* Comentário da Orientadora / Orientador (Fiel ao protótipo) */}
@@ -525,7 +514,7 @@ export function PainelTccModular({
                               Comentário da orientadora
                             </b>
                             <p className="line-clamp-2 leading-relaxed text-[#111a2e]">
-                              {ultimoFeedback ?? (progresso === 0 ? "Bloco ainda não iniciado." : "Aguardando nova revisão.")}
+                              {ultimoFeedback ?? (col.key === "Pendente" ? "Bloco ainda não iniciado." : "Aguardando nova revisão.")}
                             </p>
                           </div>
                         </Link>

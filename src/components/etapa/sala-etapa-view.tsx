@@ -20,10 +20,9 @@ import {
   Edit3,
   Trash2,
   X,
-  FileUp,
+  RotateCcw,
 } from "lucide-react";
 import { StatusPill } from "@/components/ui/status-pill";
-import { ProgressBar } from "@/components/ui/progress-bar";
 import type {
   SalaEtapaTcc,
   PostagemSala,
@@ -57,19 +56,17 @@ export function SalaEtapaView({
   const [tituloEtapa, setTituloEtapa] = useState(etapaInicial.titulo);
   const [descricaoInstrucoes, setDescricaoInstrucoes] = useState(etapaInicial.descricaoInstrucoes);
   const [dataEntrega, setDataEntrega] = useState(etapaInicial.dataEntrega);
-  const [progressoEtapa, setProgressoEtapa] = useState(etapaInicial.progresso);
   const [statusKanban, setStatusKanban] = useState(etapaInicial.statusKanban);
 
-  // Modal / Formulário de edição dos dados da etapa (Nome, prazo, instruções, etc.)
+  // Modal de edição dos dados da etapa
   const [editandoEtapa, setEditandoEtapa] = useState(false);
   const [tempTitulo, setTempTitulo] = useState(tituloEtapa);
   const [tempInstrucoes, setTempInstrucoes] = useState(descricaoInstrucoes);
   const [tempDataEntrega, setTempDataEntrega] = useState(dataEntrega);
-  const [tempProgresso, setTempProgresso] = useState(progressoEtapa);
   const [tempStatus, setTempStatus] = useState(statusKanban);
   const [salvoSucesso, setSalvoSucesso] = useState(false);
 
-  // Materiais de Apoio (Adicionar e Remover)
+  // Materiais de Apoio
   const [materiais, setMateriais] = useState<MaterialApoio[]>(etapaInicial.materiaisFixados);
   const [mostrarFormMaterial, setMostrarFormMaterial] = useState(false);
   const [novoMaterialNome, setNovoMaterialNome] = useState("");
@@ -98,9 +95,22 @@ export function SalaEtapaView({
     setTituloEtapa(tempTitulo);
     setDescricaoInstrucoes(tempInstrucoes);
     setDataEntrega(tempDataEntrega);
-    setProgressoEtapa(Number(tempProgresso));
     setStatusKanban(tempStatus);
     setEditandoEtapa(false);
+    setSalvoSucesso(true);
+    setTimeout(() => setSalvoSucesso(false), 4000);
+  };
+
+  // Orientador marca que está corrigindo -> move etapa para "Em correção"
+  const handleMarcarEmCorrecao = () => {
+    setStatusKanban("Em correção");
+    setSalvoSucesso(true);
+    setTimeout(() => setSalvoSucesso(false), 4000);
+  };
+
+  // Orientador marca etapa como concluída
+  const handleMarcarConcluido = () => {
+    setStatusKanban("Concluído");
     setSalvoSucesso(true);
     setTimeout(() => setSalvoSucesso(false), 4000);
   };
@@ -128,7 +138,7 @@ export function SalaEtapaView({
     setMateriais(materiais.filter((m) => m.id !== id));
   };
 
-  // Ação de envio do aluno
+  // Ação de envio do aluno: faz a etapa ir direto para "Para correção"
   const handleEnviarTrabalho = (e: React.FormEvent) => {
     e.preventDefault();
     if (!arquivoUpload) return;
@@ -140,10 +150,11 @@ export function SalaEtapaView({
         new Date().toLocaleDateString("pt-BR") +
         " " +
         new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-      status: "Pronta para Revisão",
+      status: "Para correção",
     };
 
     setHistorico([novaVersao, ...historico]);
+    setStatusKanban("Para correção"); // Vai direto para "Para correção" do orientador
     setUploadSucesso(true);
     setArquivoUpload(null);
     setTabAtiva("historico");
@@ -175,7 +186,7 @@ export function SalaEtapaView({
     setTimeout(() => setPostagemCriadaSucesso(false), 4000);
   };
 
-  // Parecer do orientador
+  // Parecer do orientador -> coloca em "Em correção"
   const handleEmitirParecer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!parecerOrientador.trim() || historico.length === 0) return;
@@ -184,9 +195,10 @@ export function SalaEtapaView({
     novaLista[0] = {
       ...novaLista[0],
       notaOuParecer: parecerOrientador.trim(),
-      status: "Correção Solicitada",
+      status: "Em correção",
     };
     setHistorico(novaLista);
+    setStatusKanban("Em correção");
     setParecerOrientador("");
     setParecerSucesso(true);
     setTimeout(() => setParecerSucesso(false), 4000);
@@ -203,30 +215,47 @@ export function SalaEtapaView({
           <ArrowLeft className="w-4 h-4" /> {voltarLabel ?? "Voltar"}
         </Link>
 
-        {/* Botão de Editar Etapa para o Orientador */}
+        {/* Controles rápidos de status da etapa para o Orientador */}
         {isOrientador && !editandoEtapa && (
-          <button
-            type="button"
-            onClick={() => {
-              setTempTitulo(tituloEtapa);
-              setTempInstrucoes(descricaoInstrucoes);
-              setTempDataEntrega(dataEntrega);
-              setTempProgresso(progressoEtapa);
-              setTempStatus(statusKanban);
-              setEditandoEtapa(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dfe2e8] bg-white hover:bg-[#f4f5f7] text-[#111a2e] text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
-          >
-            <Edit3 className="w-3.5 h-3.5 text-[#1e78f0]" />
-            <span>Editar Configurações da Etapa</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleMarcarEmCorrecao}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold cursor-pointer transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Marcar &quot;Em Correção&quot;</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleMarcarConcluido}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold cursor-pointer transition-colors"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Marcar &quot;Concluído&quot;</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTempTitulo(tituloEtapa);
+                setTempInstrucoes(descricaoInstrucoes);
+                setTempDataEntrega(dataEntrega);
+                setTempStatus(statusKanban);
+                setEditandoEtapa(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dfe2e8] bg-white hover:bg-[#f4f5f7] text-[#111a2e] text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-[#1e78f0]" />
+              <span>Editar Configurações</span>
+            </button>
+          </div>
         )}
       </div>
 
       {salvoSucesso && (
         <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center gap-2">
           <Check className="w-4 h-4 text-emerald-600" />
-          <span>Configurações da etapa atualizadas com sucesso!</span>
+          <span>Status da etapa atualizado com sucesso! (Status atual: {statusKanban})</span>
         </div>
       )}
 
@@ -252,8 +281,8 @@ export function SalaEtapaView({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-[#111a2e] mb-1">
                 Nome / Título da Etapa
               </label>
@@ -280,39 +309,24 @@ export function SalaEtapaView({
               />
             </div>
 
-            <div>
+            <div className="sm:col-span-3">
               <label className="block text-xs font-semibold text-[#111a2e] mb-1">
-                Status Kanban da Etapa
+                Coluna Kanban da Etapa
               </label>
               <select
                 value={tempStatus}
                 onChange={(e) => setTempStatus(e.target.value as any)}
                 className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
               >
-                <option value="Pendente">Pendente</option>
-                <option value="Em andamento">Em andamento</option>
-                <option value="Para correção">Para correção</option>
-                <option value="Em correção">Em correção</option>
+                <option value="Pendente">Pendente (não iniciada)</option>
+                <option value="Em andamento">Em andamento (aluno desenvolvendo)</option>
+                <option value="Para correção">Para correção (aluno enviou arquivo)</option>
+                <option value="Em correção">Em correção (orientador corrigindo)</option>
                 <option value="Concluído">Concluído</option>
               </select>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-[#111a2e] mb-1">
-                Progresso Concluído (%)
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={tempProgresso}
-                onChange={(e) => setTempProgresso(Number(e.target.value))}
-                required
-                className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
-              />
-            </div>
-
-            <div className="sm:col-span-2">
+            <div className="sm:col-span-3">
               <label className="block text-xs font-semibold text-[#111a2e] mb-1">
                 Objetivo e Instruções da Etapa (visível ao aluno)
               </label>
@@ -364,12 +378,11 @@ export function SalaEtapaView({
             </p>
           </div>
 
-          <div className="min-w-[190px] space-y-2 bg-[#f4f5f7] p-3.5 rounded-xl border border-[#dfe2e8]">
-            <div className="flex justify-between items-baseline text-xs">
-              <span className="text-[#6b7385] font-semibold uppercase tracking-wider">Progresso da Etapa</span>
-              <b className="text-xl font-bold text-[#111a2e]">{progressoEtapa}%</b>
-            </div>
-            <ProgressBar value={progressoEtapa} className="h-2" />
+          <div className="min-w-[190px] space-y-1 bg-[#f4f5f7] p-3 rounded-xl border border-[#dfe2e8]">
+            <span className="text-[11px] font-semibold text-[#6b7385] uppercase tracking-wider block">
+              Status Atual da Etapa
+            </span>
+            <b className="text-base font-bold text-[#111a2e]">{statusKanban}</b>
           </div>
         </div>
 
@@ -524,7 +537,7 @@ export function SalaEtapaView({
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                      className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
                     >
                       <Send className="w-3.5 h-3.5" />
                       <span>Publicar</span>
@@ -535,7 +548,7 @@ export function SalaEtapaView({
             </div>
           )}
 
-          {/* Lista de Postagens / Comunicados */}
+          {/* Lista de Postagens */}
           <div className="space-y-4">
             <h2 className="text-base font-bold text-[#111a2e]">
               Postagens e Comunicados ({postagens.length})
@@ -615,7 +628,7 @@ export function SalaEtapaView({
         </div>
       )}
 
-      {/* ABA 2: MATERIAIS DE APOIO (ADICIONAR E REMOVER) */}
+      {/* ABA 2: MATERIAIS DE APOIO */}
       {tabAtiva === "materiais" && (
         <div className="border border-[#dfe2e8] rounded-[10px] p-6 bg-white shadow-xs space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -628,7 +641,6 @@ export function SalaEtapaView({
               </p>
             </div>
 
-            {/* Adicionar Material (Orientador) */}
             {isOrientador && !mostrarFormMaterial && (
               <button
                 type="button"
@@ -641,7 +653,6 @@ export function SalaEtapaView({
             )}
           </div>
 
-          {/* Formulário para Adicionar Material */}
           {isOrientador && mostrarFormMaterial && (
             <form
               onSubmit={handleAdicionarMaterial}
@@ -746,7 +757,6 @@ export function SalaEtapaView({
                       <span>Baixar</span>
                     </button>
 
-                    {/* Remover Material (Orientador) */}
                     {isOrientador && (
                       <button
                         type="button"
@@ -780,7 +790,7 @@ export function SalaEtapaView({
           {uploadSucesso && (
             <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center gap-2.5">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>Arquivo submetido com sucesso! O status foi alterado para &quot;Pronta para Revisão&quot;.</span>
+              <span>Arquivo submetido com sucesso! A etapa foi enviada direto para &quot;Para correção&quot; do orientador.</span>
             </div>
           )}
 
@@ -814,7 +824,7 @@ export function SalaEtapaView({
                   className="px-5 py-2.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors shadow-xs cursor-pointer justify-center"
                 >
                   <Send className="w-4 h-4" />
-                  <span>Sinalizar como Pronta para Revisão</span>
+                  <span>Enviar para Correção do Orientador</span>
                 </button>
               </div>
             )}
@@ -853,7 +863,7 @@ export function SalaEtapaView({
               {parecerSucesso && (
                 <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md text-xs font-medium flex items-center gap-1.5">
                   <Check className="w-4 h-4 text-emerald-600" />
-                  <span>Parecer registrado com sucesso na entrega do aluno!</span>
+                  <span>Parecer registrado com sucesso! Etapa movida para &quot;Em correção&quot;.</span>
                 </div>
               )}
 
@@ -871,7 +881,7 @@ export function SalaEtapaView({
                     type="submit"
                     className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
                   >
-                    Registrar Parecer
+                    Registrar Parecer (Mover para Em Correção)
                   </button>
                 </div>
               </form>
