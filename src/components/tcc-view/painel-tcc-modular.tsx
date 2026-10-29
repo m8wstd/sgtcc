@@ -7,8 +7,6 @@ import {
   Calendar,
   MessageSquare,
   Clock,
-  ArrowRight,
-  ExternalLink,
   Columns3,
   List,
   FileText,
@@ -23,7 +21,7 @@ import {
   formatarData,
   formatarDataHora,
 } from "@/components/layout/status";
-import type { ItemMarco, PainelTcc, TccResumo } from "@/lib/data/queries";
+import type { ItemMarco, TccResumo } from "@/lib/data/queries";
 import type { StatusEntrega } from "@/types";
 
 // ── Colunas Kanban Fidedignas ao Protótipo ──────────────────────────────────
@@ -122,7 +120,7 @@ export function PainelTccModular({
 
   const totalComentarios = itens.reduce((acc, i) => acc + i.feedbacks.length, 0);
 
-  // Proxima entrega (menor prazo nao concluido)
+  // Próxima entrega
   const proximoNaoConcluido = itens.find((i) => i.statusEfetivo !== "CONCLUIDA");
   const proximaEntregaTexto = proximoNaoConcluido
     ? formatarData(proximoNaoConcluido.marco.dataLimite)
@@ -143,7 +141,7 @@ export function PainelTccModular({
           <div />
         )}
 
-        {/* Seletor de TCC (Fase 1 vs Fase 2 / Outros TCCs do Aluno) */}
+        {/* Seletor de TCC */}
         {outrosTccs.length > 1 && (
           <div className="flex items-center gap-1.5 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
             <span className="text-[11px] font-semibold text-[#6b7385] px-2">
@@ -172,7 +170,7 @@ export function PainelTccModular({
         )}
       </div>
 
-      {/* Saudação (se fornecida, padrão do protótipo) */}
+      {/* Saudação */}
       {saudacaoNome && (
         <div className="border-b border-[#dfe2e8] pb-3">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
@@ -181,13 +179,13 @@ export function PainelTccModular({
           <p className="text-sm text-[#6b7385] mt-1">
             {subtitulo ??
               (isOrientador
-                ? "Clique em qualquer bloco para acessar a sala e postar avisos, diretrizes e correções."
-                : "Acompanhe o andamento do seu TCC. Clique em uma etapa para acessar a sala virtual.")}
+                ? "Clique no cartão da etapa para abrir a sala, postar materiais, orientar e avaliar."
+                : "Acompanhe o andamento do seu TCC. Clique no cartão da etapa para acessar a sala.")}
           </p>
         </div>
       )}
 
-      {/* Stats Cards com as métricas padronizadas do protótipo */}
+      {/* Stats Cards com as métricas do protótipo */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         <StatCard
           label="Conclusão Geral"
@@ -258,7 +256,7 @@ export function PainelTccModular({
             Etapas e Blocos de Trabalho
           </h3>
           <p className="text-xs text-[#6b7385]">
-            Clique em qualquer bloco para acessar a sala da etapa ({isOrientador ? "postar avisos e avaliar" : "ler orientações e submeter"}).
+            Clique em qualquer etapa para acessar a sala e realizar as ações.
           </p>
         </div>
 
@@ -290,7 +288,7 @@ export function PainelTccModular({
         </div>
       </div>
 
-      {/* Visualização Kanban ou Lista */}
+      {/* Visualização Kanban: O card inteiro é um Link clicável para a página da etapa */}
       {viewMode === "kanban" ? (
         <div className="w-full overflow-x-auto pb-4">
           <div className="grid grid-cols-5 gap-3.5 min-w-[760px]">
@@ -328,86 +326,44 @@ export function PainelTccModular({
                       const ultimoFeedback = item.feedbacks[0]?.comentario ?? null;
 
                       return (
-                        <div
+                        <Link
                           key={item.marco.id}
-                          className={`border rounded-[10px] p-3.5 bg-white space-y-2.5 shadow-2xs transition-all hover:border-[#1e78f0] group ${
+                          href={etapaHref}
+                          className={`block border rounded-[10px] p-3.5 bg-white space-y-2.5 shadow-2xs transition-all hover:border-[#1e78f0] hover:shadow-xs cursor-pointer group text-left ${
                             atrasado ? "border-red-300" : "border-[#dfe2e8]"
                           }`}
                         >
-                          {/* Cabeçalho clicável do bloco */}
-                          <Link href={etapaHref} className="block">
-                            <div className="flex items-start justify-between gap-1">
-                              <h4 className="text-[12px] font-bold text-[#111a2e] group-hover:text-[#1e78f0] transition-colors leading-snug">
-                                {idx + 1}. {item.marco.titulo}
-                              </h4>
-                              <div className="flex items-center gap-1 shrink-0">
-                                {atrasado && (
-                                  <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
-                                    Atrasado
-                                  </span>
-                                )}
-                                <ArrowRight className="w-3.5 h-3.5 text-[#6b7385] opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
-                              </div>
-                            </div>
-                          </Link>
+                          {/* Cabeçalho do bloco */}
+                          <div className="flex items-start justify-between gap-1">
+                            <h4 className="text-[12.5px] font-bold text-[#111a2e] group-hover:text-[#1e78f0] transition-colors leading-snug">
+                              {idx + 1}. {item.marco.titulo}
+                            </h4>
+                            {atrasado && (
+                              <span className="shrink-0 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
+                                Atrasado
+                              </span>
+                            )}
+                          </div>
 
                           {/* Progresso do Bloco */}
                           <ProgressBar value={progresso} className="h-1.5" />
 
                           {/* Métricas do Bloco */}
-                          <div className="flex justify-between items-center text-[10.5px] text-[#6b7385]">
+                          <div className="flex justify-between items-center text-[11px] text-[#6b7385] font-medium">
                             <span>{progresso}% concluído</span>
-                            <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {formatarData(item.marco.dataLimite)}
-                            </span>
+                            <span>Prazo {formatarData(item.marco.dataLimite)}</span>
                           </div>
 
-                          {/* Comentário da Orientadora / Orientador */}
-                          {ultimoFeedback ? (
-                            <div className="p-2 bg-[#f4f5f7] border-l-2 border-[#1e78f0] rounded-[4px]">
-                              <b className="block text-[10px] text-[#6b7385] uppercase tracking-wider mb-0.5">
-                                Comentário da orientadora
-                              </b>
-                              <p className="text-[11px] text-[#111a2e] line-clamp-2 leading-relaxed">
-                                {ultimoFeedback}
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="p-2 bg-[#f4f5f7] rounded-[4px]">
-                              <p className="text-[10.5px] text-[#9aa0ad] italic">Bloco ainda sem comentários.</p>
-                            </div>
-                          )}
-
-                          {/* Botão para entrar na Sala Virtual da Etapa */}
-                          <div className="pt-1">
-                            <Link
-                              href={etapaHref}
-                              className="w-full py-1.5 px-2.5 rounded-lg border border-[#dfe2e8] bg-[#f4f5f7] hover:bg-[#1e78f0] hover:text-white hover:border-[#1e78f0] text-[#111a2e] text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              <span>{isOrientador ? "Acessar Sala e Postar" : "Acessar Sala da Etapa"}</span>
-                            </Link>
+                          {/* Comentário da Orientadora / Orientador (Fiel ao protótipo) */}
+                          <div className="p-2.5 bg-[#f4f5f7] border-l-2 border-[#1e78f0] rounded-[4px] text-[11.5px] text-[#111a2e]">
+                            <b className="block text-[10px] text-[#6b7385] uppercase tracking-wider mb-0.5">
+                              Comentário da orientadora
+                            </b>
+                            <p className="line-clamp-2 leading-relaxed text-[#111a2e]">
+                              {ultimoFeedback ?? (progresso === 0 ? "Bloco ainda não iniciado." : "Aguardando nova revisão.")}
+                            </p>
                           </div>
-
-                          {/* Ações do Orientador */}
-                          {isOrientador && item.statusEfetivo !== "CONCLUIDA" && (
-                            <div className="flex gap-1.5 pt-0.5">
-                              <button
-                                type="button"
-                                className="flex-1 py-1 rounded border border-[#dfe2e8] bg-white text-[10.5px] font-semibold text-[#111a2e] hover:bg-[#f4f5f7] transition-colors cursor-pointer"
-                              >
-                                Solicitar Correção
-                              </button>
-                              <button
-                                type="button"
-                                className="flex-1 py-1 rounded bg-[#1e78f0] hover:bg-[#1666d3] text-white text-[10.5px] font-semibold transition-colors cursor-pointer"
-                              >
-                                Concluir
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                        </Link>
                       );
                     })
                   )}
@@ -449,8 +405,7 @@ export function PainelTccModular({
                       href={etapaHref}
                       className="px-3 py-1 rounded-md bg-white border border-[#dfe2e8] hover:border-[#1e78f0] text-[#1e78f0] text-xs font-semibold flex items-center gap-1 transition-colors"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Sala da Etapa</span>
+                      <span>Entrar na Sala da Etapa</span>
                     </Link>
                     <StatusPill status={statusLabel} />
                   </div>
@@ -539,24 +494,6 @@ export function PainelTccModular({
                           ))}
                         </div>
                       )}
-                    </div>
-                  )}
-
-                  {/* Ações do Orientador */}
-                  {isOrientador && (
-                    <div className="pt-3 border-t border-[#dfe2e8] flex items-center justify-end gap-2.5">
-                      <button
-                        type="button"
-                        className="px-3.5 py-1.5 rounded-lg border border-[#dfe2e8] bg-white text-xs font-semibold text-[#111a2e] hover:bg-[#f4f5f7] transition-colors cursor-pointer"
-                      >
-                        Solicitar Correção
-                      </button>
-                      <button
-                        type="button"
-                        className="px-3.5 py-1.5 rounded-lg bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-semibold transition-colors shadow-xs cursor-pointer"
-                      >
-                        Marcar como Concluído
-                      </button>
                     </div>
                   )}
                 </div>

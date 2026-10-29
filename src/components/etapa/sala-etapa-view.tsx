@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   ArrowLeft,
   BookOpen,
-  Calendar,
   Download,
   FileCheck,
   FileText,
@@ -64,6 +63,10 @@ export function SalaEtapaView({
   const [uploadSucesso, setUploadSucesso] = useState(false);
   const [historico, setHistorico] = useState<HistoricoEnvioAluno[]>(etapa.historicoEnvios);
 
+  // Avaliação rápida do Orientador (Parecer/Aprovação)
+  const [parecerOrientador, setParecerOrientador] = useState("");
+  const [parecerSucesso, setParecerSucesso] = useState(false);
+
   // Ação de envio do aluno
   const handleEnviarTrabalho = (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,6 +112,22 @@ export function SalaEtapaView({
     setMostrarFormPostagem(false);
     setPostagemCriadaSucesso(true);
     setTimeout(() => setPostagemCriadaSucesso(false), 4000);
+  };
+
+  const handleEmitirParecer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!parecerOrientador.trim() || historico.length === 0) return;
+
+    const novaLista = [...historico];
+    novaLista[0] = {
+      ...novaLista[0],
+      notaOuParecer: parecerOrientador.trim(),
+      status: "Correção Solicitada",
+    };
+    setHistorico(novaLista);
+    setParecerOrientador("");
+    setParecerSucesso(true);
+    setTimeout(() => setParecerSucesso(false), 4000);
   };
 
   return (
@@ -180,19 +199,21 @@ export function SalaEtapaView({
             <span>Materiais de Apoio ({etapa.materiaisFixados.length})</span>
           </button>
 
-          {/* Submeter trabalho (focado no aluno) */}
-          <button
-            type="button"
-            onClick={() => setTabAtiva("envio")}
-            className={`px-4 py-2 rounded-full text-xs sm:text-[13px] border transition-colors cursor-pointer flex items-center gap-1.5 ${
-              tabAtiva === "envio"
-                ? "bg-[#0f1b33] text-white border-[#0f1b33] font-medium"
-                : "border-[#dfe2e8] bg-white text-[#111a2e] hover:bg-[#f4f5f7]"
-            }`}
-          >
-            <UploadCloud className="w-3.5 h-3.5" />
-            <span>{isOrientador ? "Área de Envio do Aluno" : "Submeter Trabalho"}</span>
-          </button>
+          {/* Aba de submissão: apenas para o Aluno */}
+          {!isOrientador && (
+            <button
+              type="button"
+              onClick={() => setTabAtiva("envio")}
+              className={`px-4 py-2 rounded-full text-xs sm:text-[13px] border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                tabAtiva === "envio"
+                  ? "bg-[#0f1b33] text-white border-[#0f1b33] font-medium"
+                  : "border-[#dfe2e8] bg-white text-[#111a2e] hover:bg-[#f4f5f7]"
+              }`}
+            >
+              <UploadCloud className="w-3.5 h-3.5" />
+              <span>Submeter Trabalho</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -204,7 +225,11 @@ export function SalaEtapaView({
             }`}
           >
             <FileCheck className="w-3.5 h-3.5" />
-            <span>Histórico de Versões ({historico.length})</span>
+            <span>
+              {isOrientador
+                ? `Versões do Aluno (${historico.length})`
+                : `Histórico de Versões (${historico.length})`}
+            </span>
           </button>
         </div>
       </div>
@@ -235,16 +260,16 @@ export function SalaEtapaView({
             </div>
           </div>
 
-          {/* Botão / Formulário do Orientador para Postar */}
+          {/* Formulário do Orientador para Postar */}
           {isOrientador && (
             <div className="border border-[#dfe2e8] rounded-[10px] p-5 bg-white shadow-xs space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-[#111a2e]">
-                    Área do Orientador: Publicar no Mural
+                    Publicar no Mural da Sala
                   </h3>
                   <p className="text-xs text-[#6b7385]">
-                    Envie recados, diretrizes, correções ou materiais para este aluno nesta etapa.
+                    Envie recados, diretrizes, correções ou orientações para o aluno nesta etapa.
                   </p>
                 </div>
                 {!mostrarFormPostagem && (
@@ -269,7 +294,7 @@ export function SalaEtapaView({
                       type="text"
                       value={novoTitulo}
                       onChange={(e) => setNovoTitulo(e.target.value)}
-                      placeholder="Ex: Instruções para revisão da metodologia"
+                      placeholder="Ex: Orientações para revisão da metodologia"
                       required
                       className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
                     />
@@ -277,12 +302,12 @@ export function SalaEtapaView({
 
                   <div>
                     <label className="block text-xs font-semibold text-[#111a2e] mb-1">
-                      Conteúdo / Mensagem de Orientação
+                      Conteúdo / Mensagem
                     </label>
                     <textarea
                       value={novoConteudo}
                       onChange={(e) => setNovoConteudo(e.target.value)}
-                      placeholder="Escreva aqui as diretrizes, correções ou orientações para o aluno..."
+                      placeholder="Escreva aqui as diretrizes ou comentários para o aluno..."
                       rows={4}
                       required
                       className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
@@ -302,7 +327,7 @@ export function SalaEtapaView({
                       className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                     >
                       <Send className="w-3.5 h-3.5" />
-                      <span>Publicar para o Aluno</span>
+                      <span>Publicar</span>
                     </button>
                   </div>
                 </form>
@@ -310,7 +335,7 @@ export function SalaEtapaView({
             </div>
           )}
 
-          {/* Lista de Postagens / Avisos */}
+          {/* Lista de Postagens / Comunicados */}
           <div className="space-y-4">
             <h2 className="text-base font-bold text-[#111a2e]">
               Postagens e Comunicados ({postagens.length})
@@ -354,7 +379,7 @@ export function SalaEtapaView({
                   {post.anexos && post.anexos.length > 0 && (
                     <div className="pt-2 border-t border-[#dfe2e8] space-y-2">
                       <span className="text-[11px] font-bold text-[#6b7385] uppercase tracking-wider flex items-center gap-1">
-                        <Paperclip className="w-3.5 h-3.5" /> Arquivos Anexados nesta Postagem
+                        <Paperclip className="w-3.5 h-3.5" /> Arquivos Anexados
                       </span>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         {post.anexos.map((anexo: MaterialApoio) => (
@@ -441,17 +466,15 @@ export function SalaEtapaView({
         </div>
       )}
 
-      {/* ABA 3: SUBMETER TRABALHO (ENVIO) */}
-      {tabAtiva === "envio" && (
+      {/* ABA 3: SUBMETER TRABALHO (APENAS PARA O ALUNO) */}
+      {!isOrientador && tabAtiva === "envio" && (
         <div className="border border-[#dfe2e8] rounded-[10px] p-6 bg-white shadow-xs space-y-5">
           <div>
             <h2 className="text-base font-bold text-[#111a2e]">
               Submissão de Documento &bull; {etapa.titulo}
             </h2>
             <p className="text-xs text-[#6b7385] mt-0.5">
-              {isOrientador
-                ? "Área onde o aluno realiza o upload das versões de texto para a sua revisão"
-                : "Faça o upload do documento finalizado desta etapa para que o professor realize a correção"}
+              Faça o upload do documento finalizado desta etapa para que o professor realize a correção
             </p>
           </div>
 
@@ -500,17 +523,61 @@ export function SalaEtapaView({
         </div>
       )}
 
-      {/* ABA 4: HISTÓRICO DE VERSÕES */}
+      {/* ABA 4: HISTÓRICO DE VERSÕES / AVALIAÇÃO DO ORIENTADOR */}
       {tabAtiva === "historico" && (
-        <div className="border border-[#dfe2e8] rounded-[10px] p-6 bg-white shadow-xs space-y-4">
+        <div className="border border-[#dfe2e8] rounded-[10px] p-6 bg-white shadow-xs space-y-6">
           <div>
             <h2 className="text-base font-bold text-[#111a2e]">
-              Histórico de Versões do Estudante
+              {isOrientador
+                ? `Versões e Entregas do Aluno &bull; ${etapa.titulo}`
+                : "Histórico de Versões do Estudante"}
             </h2>
             <p className="text-xs text-[#6b7385] mt-0.5">
-              Registro completo e imutável de todas as submissões realizadas nesta etapa
+              {isOrientador
+                ? "Avalie os arquivos enviados pelo aluno e registre feedbacks de correção ou aprovação"
+                : "Registro completo e imutável de todas as submissões realizadas nesta etapa"}
             </p>
           </div>
+
+          {/* Área do Orientador: emitir parecer no arquivo mais recente */}
+          {isOrientador && historico.length > 0 && (
+            <div className="p-4 rounded-xl bg-[#f4f5f7] border border-[#dfe2e8] space-y-3">
+              <div className="flex items-center justify-between">
+                <b className="text-xs font-bold text-[#111a2e]">
+                  Emitir Parecer / Solicitar Correção para a Versão Mais Recente
+                </b>
+                <span className="text-[11px] text-[#6b7385]">
+                  Arquivo: <b>{historico[0].arquivoNome}</b>
+                </span>
+              </div>
+
+              {parecerSucesso && (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md text-xs font-medium flex items-center gap-1.5">
+                  <Check className="w-4 h-4 text-emerald-600" />
+                  <span>Parecer registrado com sucesso na entrega do aluno!</span>
+                </div>
+              )}
+
+              <form onSubmit={handleEmitirParecer} className="space-y-2.5">
+                <textarea
+                  value={parecerOrientador}
+                  onChange={(e) => setParecerOrientador(e.target.value)}
+                  placeholder="Descreva as correções necessárias ou pontos a melhorar neste envio..."
+                  rows={2}
+                  required
+                  className="w-full px-3 py-2 text-xs bg-white border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
+                  >
+                    Registrar Parecer
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
 
           {historico.length ? (
             <div className="divide-y divide-[#dfe2e8] border border-[#dfe2e8] rounded-lg overflow-hidden bg-white text-xs">
@@ -527,7 +594,14 @@ export function SalaEtapaView({
                       </p>
                     )}
                   </div>
-                  <div className="shrink-0">
+                  <div className="shrink-0 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => alert(`Baixando versão: ${envio.arquivoNome}`)}
+                      className="px-2.5 py-1 text-xs font-semibold text-[#1e78f0] bg-white border border-[#dfe2e8] hover:bg-blue-50 rounded-md cursor-pointer"
+                    >
+                      Baixar Arquivo
+                    </button>
                     <StatusPill status={envio.status} />
                   </div>
                 </div>
