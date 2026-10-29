@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { StatusPill } from "@/components/ui/status-pill";
 import { ProgressBar } from "@/components/ui/progress-bar";
-import type { SalaEtapaTcc, PostagemSala } from "../dados-etapas";
+import type { SalaEtapaTcc, PostagemSala, MaterialApoio, HistoricoEnvioAluno } from "../../dados-etapas";
 
 interface SalaEtapaPageClientProps {
   etapa: SalaEtapaTcc;
@@ -224,7 +224,7 @@ export function SalaEtapaPageClient({ etapa, nomeAluno }: SalaEtapaPageClientPro
                         <Paperclip className="w-3.5 h-3.5" /> Arquivos Anexados nesta Postagem
                       </span>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        {post.anexos.map((anexo) => (
+                        {post.anexos.map((anexo: MaterialApoio) => (
                           <div
                             key={anexo.id}
                             className="p-3 rounded-lg border border-[#dfe2e8] bg-[#f4f5f7] flex items-center justify-between gap-3"
@@ -273,7 +273,7 @@ export function SalaEtapaPageClient({ etapa, nomeAluno }: SalaEtapaPageClientPro
           </div>
 
           <div className="divide-y divide-[#dfe2e8] border border-[#dfe2e8] rounded-lg overflow-hidden bg-white">
-            {etapa.materiaisFixados.map((mat) => (
+            {etapa.materiaisFixados.map((mat: MaterialApoio) => (
               <div
                 key={mat.id}
                 className="p-4 flex items-center justify-between gap-4 hover:bg-[#f4f5f7] transition-colors"
@@ -377,7 +377,7 @@ export function SalaEtapaPageClient({ etapa, nomeAluno }: SalaEtapaPageClientPro
 
           {historico.length ? (
             <div className="divide-y divide-[#dfe2e8] border border-[#dfe2e8] rounded-lg overflow-hidden bg-white text-xs">
-              {historico.map((envio, i) => (
+              {historico.map((envio: HistoricoEnvioAluno, i: number) => (
                 <div key={i} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[#f4f5f7] transition-colors">
                   <div className="space-y-1">
                     <span className="font-bold text-sm text-[#111a2e] block">
