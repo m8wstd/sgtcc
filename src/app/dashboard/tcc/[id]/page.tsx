@@ -37,12 +37,26 @@ async function Painel({ params }: { params: Promise<{ id: string }> }) {
     );
   }
 
+  // Se for professor avaliador, ele avalia diretamente o projeto final na banca
+  if (sessao.perfil === PerfilEnum.AVALIADOR) {
+    return (
+      <TccDetalheClient
+        painel={painel}
+        voltarHref={homeDoPerfil(sessao.perfil)}
+        isAluno={false}
+        isOrientador={false}
+        isAvaliador={true}
+      />
+    );
+  }
+
   return (
     <TccDetalheClient
       painel={painel}
       voltarHref={homeDoPerfil(sessao.perfil)}
       isAluno={sessao.perfil === PerfilEnum.ALUNO}
       isOrientador={sessao.perfil === PerfilEnum.ORIENTADOR}
+      isAvaliador={false}
     />
   );
 }

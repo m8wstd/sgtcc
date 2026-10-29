@@ -14,6 +14,7 @@ import {
   PlusCircle,
   X,
   Check,
+  Award,
 } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -378,12 +379,23 @@ export function PainelTccModular({
             </p>
           </div>
 
-          <div className="min-w-[190px] space-y-1.5 bg-[#f4f5f7] p-3.5 rounded-lg border border-[#dfe2e8]">
-            <div className="flex justify-between items-baseline text-xs">
-              <span className="text-[#6b7385] font-medium">Progresso Geral</span>
-              <b className="text-lg font-bold text-[#111a2e]">{porcentagemGeral}%</b>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            {/* Botão de Envio para a Banca Examinadora */}
+            <Link
+              href={`/dashboard/tcc/${tcc.id}/banca`}
+              className="px-4 py-2 bg-[#0f1b33] hover:bg-[#1a2d52] text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-colors shadow-xs"
+            >
+              <Award className="w-4 h-4 text-yellow-400" />
+              <span>{isOrientador ? "Ver Envio à Banca" : "Enviar para a Banca Avaliadora"}</span>
+            </Link>
+
+            <div className="min-w-[170px] space-y-1.5 bg-[#f4f5f7] p-3 rounded-lg border border-[#dfe2e8]">
+              <div className="flex justify-between items-baseline text-xs">
+                <span className="text-[#6b7385] font-medium">Progresso Geral</span>
+                <b className="text-base font-bold text-[#111a2e]">{porcentagemGeral}%</b>
+              </div>
+              <ProgressBar value={porcentagemGeral} className="h-2" />
             </div>
-            <ProgressBar value={porcentagemGeral} className="h-2" />
           </div>
         </div>
       </div>
