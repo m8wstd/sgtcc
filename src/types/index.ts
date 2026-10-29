@@ -63,6 +63,8 @@ export interface TCC {
   id: string;
   titulo: string;
   statusGeral: StatusGeralTCC;
+  fase?: 1 | 2; // TCC 1 ou TCC 2
+  curso?: string; // ex: "Engenharia de Software", "Sistemas de Informação"
   versaoFinalUrl?: string;
   aluno_id: string;
   orientador_id: string;

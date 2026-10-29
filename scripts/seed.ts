@@ -76,19 +76,32 @@ async function main() {
     });
   }
 
-  // 4. TCCs: Jorge com Joana; Maria com o orientador antigo (para testar a troca)
+  // 4. TCCs: Jorge com Joana (TCC 1 e TCC 2); Maria com o orientador antigo (para testar a troca)
   await db.collection("tccs").doc("tcc-jorge").set({
     id: "tcc-jorge",
-    titulo: "Sistema de Gestão de TCC",
+    titulo: "Sistema de Gestão de TCC (SGTCC)",
     statusGeral: "EM_ANDAMENTO",
+    fase: 1,
+    curso: "Engenharia de Software",
     aluno_id: "2026001",
     orientador_id: joana,
     avaliadoresUids: [silvia],
+  });
+  await db.collection("tccs").doc("tcc-jorge-2").set({
+    id: "tcc-jorge-2",
+    titulo: "Monografia Final: Sistema de Gestão de TCC",
+    statusGeral: "EM_ANDAMENTO",
+    fase: 2,
+    curso: "Engenharia de Software",
+    aluno_id: "2026001",
+    orientador_id: joana,
   });
   await db.collection("tccs").doc("tcc-maria").set({
     id: "tcc-maria",
     titulo: "Análise de Dados Acadêmicos",
     statusGeral: "EM_ANDAMENTO",
+    fase: 1,
+    curso: "Sistemas de Informação",
     aluno_id: "2026002",
     orientador_id: orient2,
   });
