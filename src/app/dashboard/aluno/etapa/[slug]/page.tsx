@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireSessao } from "@/lib/auth/server-session";
 import { PerfilEnum } from "@/types";
 import { SALAS_ETAPAS_MOCK } from "../../dados-etapas";
-import { SalaEtapaPageClient } from "./etapa-detalhe-page-client";
+import { SalaEtapaView } from "@/components/etapa/sala-etapa-view";
 
 export const metadata = { title: "Sala da Etapa — SGTCC" };
 export const dynamic = "force-dynamic";
@@ -20,9 +20,12 @@ async function ConteudoEtapa({ params }: EtapaPageProps) {
   if (!etapa) notFound();
 
   return (
-    <SalaEtapaPageClient
+    <SalaEtapaView
       etapa={etapa}
-      nomeAluno={sessao.nome ?? "Aluno"}
+      nomeUsuario={sessao.nome ?? "Aluno"}
+      papelUsuario="aluno"
+      voltarHref="/dashboard/aluno"
+      voltarLabel="Voltar ao Painel do Aluno"
     />
   );
 }
