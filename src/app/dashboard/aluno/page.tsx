@@ -7,24 +7,34 @@ import { AlunoDashboardClient } from "./aluno-dashboard-client";
 export const metadata = { title: "Painel do Aluno — SGTCC" };
 export const dynamic = "force-dynamic";
 
-async function ConteudoAluno() {
+interface AlunoPageProps {
+  searchParams?: Promise<{ tcc?: string }>;
+}
+
+async function ConteudoAluno({ searchParams }: AlunoPageProps) {
   const sessao = await requireSessao(PerfilEnum.ALUNO);
   const tccs = await listarTccsVisiveis(sessao);
-  const detalhesPrincipal = tccs[0] ? await getPainelTcc(sessao, tccs[0].id) : null;
+  const params = await searchParams;
+  const tccIdSelecionado = params?.tcc && tccs.some((t) => t.id === params.tcc)
+    ? params.tcc
+    : (tccs[0]?.id ?? null);
+
+  const detalhesPrincipal = tccIdSelecionado ? await getPainelTcc(sessao, tccIdSelecionado) : null;
 
   return (
     <AlunoDashboardClient
       nomeAluno={sessao.nome ?? "Aluno(a)"}
       tccs={tccs}
       detalhesPrincipal={detalhesPrincipal}
+      tccIdAtivo={tccIdSelecionado}
     />
   );
 }
 
-export default function AlunoDashboardPage() {
+export default function AlunoDashboardPage(props: AlunoPageProps) {
   return (
     <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-[#f4f5f7]" />}>
-      <ConteudoAluno />
+      <ConteudoAluno searchParams={props.searchParams} />
     </Suspense>
   );
 }

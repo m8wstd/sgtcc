@@ -15,10 +15,21 @@ interface OrientadorDashboardClientProps {
 }
 
 type TabFiltro = "todos" | "EM_ANDAMENTO" | "AGUARDANDO_BANCA" | "APROVADO" | "REPROVADO";
+type TabFase = "todas" | "1" | "2";
 
 export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDashboardClientProps) {
+  const [faseAtiva, setFaseAtiva] = useState<TabFase>("todas");
+  const [cursoAtivo, setCursoAtivo] = useState<string>("todos");
   const [filtro, setFiltro] = useState<TabFiltro>("todos");
   const [busca, setBusca] = useState("");
+
+  const cursosDisponiveis = useMemo(() => {
+    const setC = new Set<string>();
+    tccs.forEach((t) => {
+      if (t.curso) setC.add(t.curso);
+    });
+    return Array.from(setC);
+  }, [tccs]);
 
   const stats = useMemo(() => {
     const total = tccs.length;
@@ -30,6 +41,13 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
 
   const tccsFiltrados = useMemo(() => {
     return tccs.filter((t) => {
+      const matchFase =
+        faseAtiva === "todas"
+          ? true
+          : faseAtiva === "1"
+          ? t.fase === 1 || !t.fase
+          : t.fase === 2;
+      const matchCurso = cursoAtivo === "todos" ? true : t.curso === cursoAtivo;
       const matchFiltro = filtro === "todos" ? true : t.statusGeral === filtro;
       const termo = busca.toLowerCase();
       const matchBusca =
@@ -37,9 +55,9 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
         t.titulo.toLowerCase().includes(termo) ||
         t.alunoNome.toLowerCase().includes(termo) ||
         t.aluno_id.toLowerCase().includes(termo);
-      return matchFiltro && matchBusca;
+      return matchFase && matchCurso && matchFiltro && matchBusca;
     });
-  }, [tccs, filtro, busca]);
+  }, [tccs, faseAtiva, cursoAtivo, filtro, busca]);
 
   return (
     <div className="space-y-8 w-full">
@@ -84,7 +102,68 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
         />
       </div>
 
-      {/* Controles de Filtro e Busca */}
+      {/* Abas de Fase (TCC 1 vs TCC 2) e Filtro de Curso do Protótipo */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#f4f5f7] border border-[#dfe2e8]">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-[#6b7385] uppercase tracking-wide mr-1">
+            Fase:
+          </span>
+          <button
+            type="button"
+            onClick={() => setFaseAtiva("todas")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              faseAtiva === "todas"
+                ? "bg-[#0f1b33] text-white shadow-xs"
+                : "bg-white text-[#111a2e] border border-[#dfe2e8] hover:bg-slate-50"
+            }`}
+          >
+            Todas as Fases
+          </button>
+          <button
+            type="button"
+            onClick={() => setFaseAtiva("1")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              faseAtiva === "1"
+                ? "bg-[#1e78f0] text-white shadow-xs"
+                : "bg-white text-[#111a2e] border border-[#dfe2e8] hover:bg-slate-50"
+            }`}
+          >
+            TCC 1
+          </button>
+          <button
+            type="button"
+            onClick={() => setFaseAtiva("2")}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              faseAtiva === "2"
+                ? "bg-[#1e78f0] text-white shadow-xs"
+                : "bg-white text-[#111a2e] border border-[#dfe2e8] hover:bg-slate-50"
+            }`}
+          >
+            TCC 2
+          </button>
+        </div>
+
+        {/* Filtro por Curso (protótipo da professora) */}
+        {cursosDisponiveis.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-[#6b7385]">Curso:</span>
+            <select
+              value={cursoAtivo}
+              onChange={(e) => setCursoAtivo(e.target.value)}
+              className="text-xs bg-white border border-[#dfe2e8] rounded-lg px-3 py-1.5 font-medium text-[#111a2e] focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
+            >
+              <option value="todos">Todos os Cursos</option>
+              {cursosDisponiveis.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {/* Controles de Filtro por Status e Busca */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
         <div className="flex items-center gap-2 flex-wrap">
           <button
@@ -186,8 +265,19 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
                     </div>
 
                     <div className="min-w-0">
-                      <p className="text-xs text-[#111a2e] font-medium truncate">{t.titulo}</p>
-                      <span className="text-[11px] text-[#6b7385]">TCC Oficial</span>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs text-[#111a2e] font-medium truncate">{t.titulo}</p>
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[11px] font-bold text-[#1e78f0] bg-blue-50 px-1.5 py-0.2 rounded">
+                          {t.fase ? `TCC ${t.fase}` : "TCC 1"}
+                        </span>
+                        {t.curso && (
+                          <span className="text-[11px] text-[#6b7385] truncate">
+                            &bull; {t.curso}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="space-y-1 pr-2">

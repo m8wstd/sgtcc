@@ -12,6 +12,7 @@ interface AlunoDashboardClientProps {
   nomeAluno: string;
   tccs: TccResumo[];
   detalhesPrincipal: PainelTcc | null;
+  tccIdAtivo?: string | null;
 }
 
 const COLUNAS_KANBAN = [
@@ -25,8 +26,10 @@ const COLUNAS_KANBAN = [
 export function AlunoDashboardClient({
   nomeAluno,
   tccs,
+  detalhesPrincipal,
+  tccIdAtivo,
 }: AlunoDashboardClientProps) {
-  const tccPrincipal = tccs[0] ?? null;
+  const tccPrincipal = tccs.find((t) => t.id === tccIdAtivo) ?? tccs[0] ?? null;
   const blocos = SALAS_ETAPAS_MOCK;
 
   const totalBlocos = blocos.length;
@@ -37,13 +40,41 @@ export function AlunoDashboardClient({
   return (
     <div className="space-y-8 w-full">
       {/* Cabeçalho */}
-      <div className="border-b border-[#dfe2e8] pb-4">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
-          Olá, {nomeAluno}
-        </h1>
-        <p className="text-sm text-[#6b7385] mt-1">
-          Acompanhe o andamento do seu TCC. Clique em qualquer etapa para entrar na sala com as postagens do professor e envio.
-        </p>
+      <div className="border-b border-[#dfe2e8] pb-4 flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
+            Olá, {nomeAluno}
+          </h1>
+          <p className="text-sm text-[#6b7385] mt-1">
+            Acompanhe o andamento do seu TCC. Selecione a disciplina e clique nas etapas para acessar a sala.
+          </p>
+        </div>
+
+        {/* Seletor de TCC (TCC 1 vs TCC 2 / Múltiplos Trabalhos) */}
+        {tccs.length > 0 && (
+          <div className="flex items-center gap-2 bg-[#f4f5f7] p-1.5 rounded-xl border border-[#dfe2e8]">
+            <span className="text-xs font-semibold text-[#6b7385] px-2 hidden sm:inline">
+              Trabalho:
+            </span>
+            {tccs.map((t, idx) => {
+              const ativo = t.id === tccPrincipal?.id;
+              const rotulo = t.fase ? `TCC ${t.fase}` : (tccs.length > 1 ? `TCC ${idx + 1}` : "Meu TCC");
+              return (
+                <Link
+                  key={t.id}
+                  href={`/dashboard/aluno?tcc=${t.id}`}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    ativo
+                      ? "bg-[#0f1b33] text-white shadow-xs"
+                      : "text-[#111a2e] hover:bg-white border border-transparent hover:border-[#dfe2e8]"
+                  }`}
+                >
+                  {rotulo}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Stats Cards com as métricas do protótipo */}
@@ -80,9 +111,16 @@ export function AlunoDashboardClient({
       <div className="border border-[#dfe2e8] rounded-[10px] p-6 bg-white shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
-            <span className="text-xs font-bold text-[#1e78f0] uppercase tracking-wider">
-              {tccPrincipal ? "Trabalho de Conclusão de Curso" : "TCC em Elaboração"}
-            </span>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-bold text-[#1e78f0] uppercase tracking-wider">
+                {tccPrincipal?.fase ? `TCC ${tccPrincipal.fase}` : "Trabalho de Conclusão de Curso"}
+              </span>
+              {tccPrincipal?.curso && (
+                <span className="text-[11px] font-semibold bg-blue-50 text-[#1e78f0] px-2 py-0.5 rounded border border-blue-100">
+                  {tccPrincipal.curso}
+                </span>
+              )}
+            </div>
             <h2 className="text-xl font-bold text-[#111a2e] mt-1">
               {tccPrincipal?.titulo ?? "Inteligência Artificial Aplicada à Educação"}
             </h2>

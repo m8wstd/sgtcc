@@ -139,6 +139,7 @@ export interface ItemMarco {
 export interface PainelTcc {
   tcc: TccResumo;
   itens: ItemMarco[];
+  outrosTccsDoAluno?: TccResumo[];
 }
 
 /** Sem entrega no marco: aguardando envio, ou atrasada se o prazo já passou. */
@@ -170,6 +171,12 @@ export async function getPainelTcc(sessao: AuthenticatedSession, tccId: string):
   const autores = await porIds<Usuario>("usuarios", feedbacks.map((f) => f.autor_id));
   const [resumo] = await enriquecer([serializar<TCC>(registro.tcc)]);
 
+  // Busca todos os TCCs deste mesmo aluno para permitir alternar entre TCC 1, TCC 2, etc.
+  const todosTccsAlunoDocs = docs<TCC>(
+    await db().collection("tccs").where("aluno_id", "==", registro.tcc.aluno_id).get(),
+  );
+  const outrosTccsDoAluno = await enriquecer(todosTccsAlunoDocs);
+
   const itens: ItemMarco[] = marcos.map((marco) => {
     const entrega = entregas.find((e) => e.marco_id === marco.id) ?? null;
     return {
@@ -186,5 +193,5 @@ export async function getPainelTcc(sessao: AuthenticatedSession, tccId: string):
     };
   });
 
-  return { tcc: resumo, itens };
+  return { tcc: resumo, itens, outrosTccsDoAluno };
 }
