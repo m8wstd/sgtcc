@@ -11,6 +11,9 @@ import {
   List,
   FileText,
   UploadCloud,
+  PlusCircle,
+  X,
+  Check,
 } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -96,7 +99,7 @@ export interface PainelTccModularProps {
 
 export function PainelTccModular({
   tcc,
-  itens,
+  itens: itensIniciais,
   papel,
   saudacaoNome,
   subtitulo,
@@ -107,6 +110,14 @@ export function PainelTccModular({
 }: PainelTccModularProps) {
   const isOrientador = papel === "orientador";
   const [viewMode, setViewMode] = useState<"kanban" | "lista">("kanban");
+
+  // Estado dinâmico de etapas para permitir que o Orientador crie novas etapas
+  const [itens, setItens] = useState<ItemMarco[]>(itensIniciais);
+  const [mostrarCriarEtapa, setMostrarCriarEtapa] = useState(false);
+  const [novoTituloEtapa, setNovoTituloEtapa] = useState("");
+  const [novaDataLimite, setNovaDataLimite] = useState("30/11/2026");
+  const [novoComentarioInicial, setNovoComentarioInicial] = useState("");
+  const [etapaCriadaSucesso, setEtapaCriadaSucesso] = useState(false);
 
   const totalMarcos = itens.length;
   const concluidos = itens.filter((i) => i.statusEfetivo === "CONCLUIDA").length;
@@ -125,6 +136,43 @@ export function PainelTccModular({
   const proximaEntregaTexto = proximoNaoConcluido
     ? formatarData(proximoNaoConcluido.marco.dataLimite)
     : "Concluído";
+
+  // Criação de Nova Etapa pelo Orientador
+  const handleCriarNovaEtapa = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novoTituloEtapa.trim()) return;
+
+    const novaEtapaItem: ItemMarco = {
+      marco: {
+        id: `marco-${Date.now()}`,
+        titulo: novoTituloEtapa.trim(),
+        dataLimite: new Date("2026-11-30T00:00:00.000Z"),
+        cronograma_id: "cronograma-padrao",
+      },
+      entrega: null,
+      statusEfetivo: "AGUARDANDO_ENVIO",
+      versoes: [],
+      feedbacks: novoComentarioInicial.trim()
+        ? [
+            {
+              id: `fb-${Date.now()}`,
+              entrega_id: `ent-${Date.now()}`,
+              autor_id: "orientador-id",
+              autorNome: tcc.orientadorNome,
+              comentario: novoComentarioInicial.trim(),
+              data: new Date(),
+            },
+          ]
+        : [],
+    };
+
+    setItens([...itens, novaEtapaItem]);
+    setNovoTituloEtapa("");
+    setNovoComentarioInicial("");
+    setMostrarCriarEtapa(false);
+    setEtapaCriadaSucesso(true);
+    setTimeout(() => setEtapaCriadaSucesso(false), 4000);
+  };
 
   return (
     <div className="space-y-6 w-full">
@@ -183,6 +231,97 @@ export function PainelTccModular({
                 : "Acompanhe o andamento do seu TCC. Clique no cartão da etapa para acessar a sala.")}
           </p>
         </div>
+      )}
+
+      {/* Alerta de criação de etapa com sucesso */}
+      {etapaCriadaSucesso && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center gap-2">
+          <Check className="w-4 h-4 text-emerald-600" />
+          <span>Nova etapa criada com sucesso no plano de trabalho do aluno!</span>
+        </div>
+      )}
+
+      {/* Formulário de Criação de Etapa (Orientador) */}
+      {isOrientador && mostrarCriarEtapa && (
+        <form
+          onSubmit={handleCriarNovaEtapa}
+          className="border-2 border-[#1e78f0] rounded-[10px] p-5 bg-white shadow-xs space-y-4"
+        >
+          <div className="flex items-center justify-between border-b border-[#dfe2e8] pb-3">
+            <div className="flex items-center gap-2">
+              <PlusCircle className="w-4 h-4 text-[#1e78f0]" />
+              <h3 className="text-sm font-bold text-[#111a2e]">
+                Criar Nova Etapa de TCC para {tcc.alunoNome}
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMostrarCriarEtapa(false)}
+              className="text-[#6b7385] hover:text-[#111a2e] cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-[#111a2e] mb-1">
+                Nome da Etapa
+              </label>
+              <input
+                type="text"
+                value={novoTituloEtapa}
+                onChange={(e) => setNovoTituloEtapa(e.target.value)}
+                placeholder="Ex: Análise Estatística dos Resultados"
+                required
+                className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#111a2e] mb-1">
+                Prazo Limite de Entrega
+              </label>
+              <input
+                type="text"
+                value={novaDataLimite}
+                onChange={(e) => setNovaDataLimite(e.target.value)}
+                placeholder="Ex: 15/11/2026"
+                required
+                className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold text-[#111a2e] mb-1">
+                Comentário ou Diretriz Inicial do Orientador (opcional)
+              </label>
+              <input
+                type="text"
+                value={novoComentarioInicial}
+                onChange={(e) => setNovoComentarioInicial(e.target.value)}
+                placeholder="Ex: Conclua a tabulação antes de iniciar os gráficos."
+                className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-[#dfe2e8]">
+            <button
+              type="button"
+              onClick={() => setMostrarCriarEtapa(false)}
+              className="px-4 py-1.5 rounded-lg border border-[#dfe2e8] bg-white text-xs font-semibold text-[#6b7385] hover:bg-[#f4f5f7] cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
+            >
+              Adicionar Etapa
+            </button>
+          </div>
+        </form>
       )}
 
       {/* Stats Cards com as métricas do protótipo */}
@@ -250,7 +389,7 @@ export function PainelTccModular({
       </div>
 
       {/* Barra de Ferramentas / Alternância Kanban vs Lista */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h3 className="text-base font-bold text-[#111a2e]">
             Etapas e Blocos de Trabalho
@@ -260,31 +399,45 @@ export function PainelTccModular({
           </p>
         </div>
 
-        <div className="flex items-center gap-1 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
-          <button
-            type="button"
-            onClick={() => setViewMode("kanban")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
-              viewMode === "kanban"
-                ? "bg-white text-[#111a2e] shadow-xs"
-                : "text-[#6b7385] hover:text-[#111a2e]"
-            }`}
-          >
-            <Columns3 className="w-3.5 h-3.5" />
-            Kanban
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("lista")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
-              viewMode === "lista"
-                ? "bg-white text-[#111a2e] shadow-xs"
-                : "text-[#6b7385] hover:text-[#111a2e]"
-            }`}
-          >
-            <List className="w-3.5 h-3.5" />
-            Lista
-          </button>
+        <div className="flex items-center gap-2.5">
+          {/* Botão de Nova Etapa para o Orientador */}
+          {isOrientador && !mostrarCriarEtapa && (
+            <button
+              type="button"
+              onClick={() => setMostrarCriarEtapa(true)}
+              className="px-3.5 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Criar Nova Etapa</span>
+            </button>
+          )}
+
+          <div className="flex items-center gap-1 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
+            <button
+              type="button"
+              onClick={() => setViewMode("kanban")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
+                viewMode === "kanban"
+                  ? "bg-white text-[#111a2e] shadow-xs"
+                  : "text-[#6b7385] hover:text-[#111a2e]"
+              }`}
+            >
+              <Columns3 className="w-3.5 h-3.5" />
+              Kanban
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("lista")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
+                viewMode === "lista"
+                  ? "bg-white text-[#111a2e] shadow-xs"
+                  : "text-[#6b7385] hover:text-[#111a2e]"
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              Lista
+            </button>
+          </div>
         </div>
       </div>
 
