@@ -40,7 +40,7 @@ export const COLUNAS_KANBAN = [
 export type ColunaKanbanKey = (typeof COLUNAS_KANBAN)[number]["key"];
 
 /**
- * Regra de Negócio solicitada:
+ * Regra de Negócio:
  * - Pendente: etapas que ainda não foram começadas (AGUARDANDO_ENVIO ou ATRASADA sem versões)
  * - Em andamento: etapas que estão sendo feitas pelo aluno
  * - Para correção: quando o aluno envia o arquivo (PRONTA_PARA_REVISAO)
@@ -66,25 +66,24 @@ export function mapStatusParaColuna(status: StatusEntrega): ColunaKanbanKey {
   }
 }
 
-export function slugDoMarco(titulo: string, idx: number): string {
-  const t = titulo.toLowerCase();
-  if (t.includes("introdu")) return "introducao";
-  if (t.includes("referenc") || t.includes("teor")) return "referencial-teorico";
-  if (t.includes("metod")) return "metodologia";
-  if (t.includes("result")) return "resultados";
-  if (t.includes("conclu")) return "conclusao";
-  const fallback = ["introducao", "referencial-teorico", "metodologia", "resultados", "conclusao"];
-  return fallback[idx % fallback.length];
+export function slugDoMarco(titulo: string, index: number): string {
+  const normalizado = titulo
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalizado || `etapa-${index + 1}`;
 }
 
 export interface PainelTccModularProps {
   tcc: TccResumo;
   itens: ItemMarco[];
-  papel: "orientador" | "aluno";
-  saudacaoNome?: string;
-  subtitulo?: string;
+  papel: "orientador" | "aluno" | "avaliador" | "coordenacao";
   voltarHref?: string;
   voltarLabel?: string;
+  saudacaoNome?: string;
+  subtitulo?: string;
   outrosTccs?: TccResumo[];
   onTrocarTccHref?: (tccId: string) => string;
 }
@@ -93,10 +92,10 @@ export function PainelTccModular({
   tcc,
   itens: itensIniciais,
   papel,
-  saudacaoNome,
-  subtitulo,
   voltarHref,
   voltarLabel,
+  saudacaoNome,
+  subtitulo,
   outrosTccs = [],
   onTrocarTccHref,
 }: PainelTccModularProps) {
@@ -165,55 +164,57 @@ export function PainelTccModular({
 
   return (
     <div className="space-y-6 w-full">
-      {/* Topo / Barra de Navegação */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        {voltarHref ? (
-          <Link
-            href={voltarHref}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1e78f0] hover:underline"
-          >
-            <ArrowLeft className="h-4 w-4" /> {voltarLabel ?? "Voltar"}
-          </Link>
-        ) : (
-          <div />
-        )}
+      {/* Barra superior de navegação / troca de TCC */}
+      {(voltarHref || outrosTccs.length > 1) && (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          {voltarHref ? (
+            <Link
+              href={voltarHref}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1e78f0] hover:underline"
+            >
+              <ArrowLeft className="h-4 w-4" /> {voltarLabel ?? "Voltar"}
+            </Link>
+          ) : (
+            <div />
+          )}
 
-        {/* Seletor de TCC */}
-        {outrosTccs.length > 1 && (
-          <div className="flex items-center gap-1.5 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
-            <span className="text-[11px] font-semibold text-[#6b7385] px-2">
-              Fase do Aluno:
-            </span>
-            {outrosTccs.map((outro, i) => {
-              const ativo = outro.id === tcc.id;
-              const rotulo = outro.fase ? `TCC ${outro.fase}` : `TCC ${i + 1}`;
-              const href = onTrocarTccHref ? onTrocarTccHref(outro.id) : `/dashboard/tcc/${outro.id}`;
+          {/* Seletor de TCC */}
+          {outrosTccs.length > 1 && (
+            <div className="flex items-center gap-1.5 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
+              <span className="text-[11px] font-semibold text-[#6b7385] px-2">
+                Fase do Aluno:
+              </span>
+              {outrosTccs.map((outro, i) => {
+                const ativo = outro.id === tcc.id;
+                const rotulo = outro.fase ? `TCC ${outro.fase}` : `TCC ${i + 1}`;
+                const href = onTrocarTccHref ? onTrocarTccHref(outro.id) : `/dashboard/tcc/${outro.id}`;
 
-              return (
-                <Link
-                  key={outro.id}
-                  href={href}
-                  className={`px-3 py-1 rounded text-xs font-bold transition-all ${
-                    ativo
-                      ? "bg-[#0f1b33] text-white shadow-xs"
-                      : "text-[#111a2e] hover:bg-white"
-                  }`}
-                >
-                  {rotulo}
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                return (
+                  <Link
+                    key={outro.id}
+                    href={href}
+                    className={`px-3 py-1 rounded text-xs font-bold transition-all ${
+                      ativo
+                        ? "bg-[#0f1b33] text-white shadow-xs"
+                        : "text-[#111a2e] hover:bg-white"
+                    }`}
+                  >
+                    {rotulo}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Saudação */}
+      {/* Saudação limpa e discreta */}
       {saudacaoNome && (
-        <div className="border-b border-[#dfe2e8] pb-3">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#111a2e]">
             {isOrientador ? `Acompanhamento &bull; ${tcc.alunoNome}` : `Olá, ${saudacaoNome}`}
           </h1>
-          <p className="text-sm text-[#6b7385] mt-1">
+          <p className="text-xs text-[#6b7385] mt-0.5">
             {subtitulo ??
               (isOrientador
                 ? "Clique no cartão da etapa para abrir a sala, postar materiais, orientar e avaliar."
@@ -314,84 +315,89 @@ export function PainelTccModular({
       )}
 
       {/* Stats Cards com as métricas do protótipo */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
           label={`Conclusão Geral ${tcc.fase ? `(TCC ${tcc.fase})` : ""}`}
           value={`${porcentagemGeral}%`}
           variant="green"
-          className="p-5"
         />
         <StatCard
           label="Etapas Concluídas"
           value={`${concluidos} de ${totalMarcos}`}
           variant="blue"
-          className="p-5"
         />
         <StatCard
           label="Próxima Entrega"
           value={proximaEntregaTexto}
           variant="yellow"
-          icon={<Calendar className="w-5 h-5" />}
-          className="p-5"
+          icon={<Calendar className="w-4 h-4" />}
         />
         <StatCard
           label="Comentários Registrados"
           value={totalComentarios}
           variant="red"
-          icon={<MessageSquare className="w-5 h-5" />}
-          className="p-5"
+          icon={<MessageSquare className="w-4 h-4" />}
         />
       </div>
 
-      {/* Cabeçalho do Trabalho / Informações do TCC */}
-      <div className="border border-[#dfe2e8] rounded-[10px] p-6 bg-white shadow-xs space-y-4">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div className="space-y-1.5 max-w-2xl">
+      {/* Card Principal do TCC com visual mais limpo e organizado */}
+      <div className="border border-[#dfe2e8] rounded-[10px] p-5 sm:p-6 bg-white shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+          <div className="space-y-2 min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold text-[#1e78f0] uppercase tracking-wider">
-                {tcc.fase ? `TCC ${tcc.fase}` : "Trabalho de Conclusão de Curso"}
+              <span className="text-[11px] font-bold text-[#1e78f0] uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                {tcc.fase ? `TCC ${tcc.fase}` : "TCC"}
               </span>
               {tcc.curso && (
-                <span className="text-[11px] font-semibold bg-blue-50 text-[#1e78f0] px-2 py-0.5 rounded border border-blue-100">
+                <span className="text-[11px] font-semibold text-[#6b7385] bg-[#f4f5f7] px-2 py-0.5 rounded border border-[#dfe2e8]">
                   {tcc.curso}
                 </span>
               )}
               <StatusPill status={ROTULO_STATUS_TCC[tcc.statusGeral] ?? tcc.statusGeral} />
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold text-[#111a2e] leading-snug">
+
+            <h2 className="text-lg sm:text-xl font-bold text-[#111a2e] leading-snug">
               {tcc.titulo}
             </h2>
-            <p className="text-xs text-[#6b7385]">
-              Aluno: <span className="font-semibold text-[#111a2e]">{tcc.alunoNome}</span> (Matrícula: {tcc.aluno_id}) &bull; Orientador:{" "}
-              <span className="font-semibold text-[#111a2e]">{tcc.orientadorNome}</span>
-            </p>
+
+            <div className="flex items-center gap-3 text-xs text-[#6b7385] flex-wrap">
+              <span>
+                Aluno: <strong className="text-[#111a2e]">{tcc.alunoNome}</strong>
+                {tcc.aluno_id && <span className="opacity-75"> ({tcc.aluno_id})</span>}
+              </span>
+              <span>&bull;</span>
+              <span>
+                Orientador: <strong className="text-[#111a2e]">{tcc.orientadorNome}</strong>
+              </span>
+            </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0 self-start md:self-center">
             {/* Botão de Envio para a Banca Examinadora */}
             <Link
               href={`/dashboard/tcc/${tcc.id}/banca`}
-              className="px-4 py-2 bg-[#0f1b33] hover:bg-[#1a2d52] text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-colors shadow-xs"
+              className="px-3.5 py-2 bg-[#0f1b33] hover:bg-[#1a2d52] text-white text-xs font-semibold rounded-lg flex items-center gap-2 transition-colors shadow-xs"
             >
               <Award className="w-4 h-4 text-yellow-400" />
               <span>{isOrientador ? "Ver Envio à Banca" : "Enviar para a Banca Avaliadora"}</span>
             </Link>
 
-            <div className="min-w-[170px] space-y-1.5 bg-[#f4f5f7] p-3 rounded-lg border border-[#dfe2e8]">
-              <div className="flex justify-between items-baseline text-xs">
-                <span className="text-[#6b7385] font-medium">Progresso Geral</span>
-                <b className="text-base font-bold text-[#111a2e]">{porcentagemGeral}%</b>
+            {/* Progresso Geral Compacto */}
+            <div className="min-w-[140px] bg-[#f4f5f7] px-3.5 py-2 rounded-lg border border-[#dfe2e8]">
+              <div className="flex justify-between items-baseline text-xs mb-1">
+                <span className="text-[#6b7385] text-[11px]">Progresso Geral</span>
+                <b className="text-sm font-bold text-[#111a2e]">{porcentagemGeral}%</b>
               </div>
-              <ProgressBar value={porcentagemGeral} className="h-2" />
+              <ProgressBar value={porcentagemGeral} className="h-1.5" />
             </div>
           </div>
         </div>
       </div>
 
       {/* Barra de Ferramentas / Alternância Kanban vs Lista */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
         <div>
-          <h3 className="text-base font-bold text-[#111a2e]">
+          <h3 className="text-sm sm:text-base font-bold text-[#111a2e]">
             Etapas e Blocos de Trabalho
           </h3>
           <p className="text-xs text-[#6b7385]">
@@ -584,9 +590,7 @@ export function PainelTccModular({
 
                     {versoes.length === 0 ? (
                       <div className="p-4 rounded-lg border border-dashed border-[#dfe2e8] text-center bg-[#fafbfc]">
-                        <p className="text-xs text-[#6b7385]">
-                          Nenhum arquivo submetido para este marco ainda.
-                        </p>
+                        <p className="text-xs text-[#6b7385]">Nenhum arquivo submetido para este marco ainda.</p>
                       </div>
                     ) : (
                       <ul className="divide-y divide-[#dfe2e8] border border-[#dfe2e8] rounded-lg overflow-hidden bg-white">
@@ -599,8 +603,7 @@ export function PainelTccModular({
                               <FileText className="w-4 h-4 text-[#1e78f0] shrink-0" />
                               <div className="truncate">
                                 <span className="text-xs font-semibold text-[#111a2e]">
-                                  Versão {v.numeroVersao} &bull;{" "}
-                                  {v.arquivoUrl.split("/").pop()}
+                                  Versão {v.numeroVersao} &bull; {v.arquivoUrl.split("/").pop()}
                                 </span>
                                 <span className="block text-[11px] text-[#6b7385]">
                                   Enviado em {formatarDataHora(v.dataUpload)}
@@ -622,14 +625,12 @@ export function PainelTccModular({
                       <div className="flex items-center gap-1.5 mb-3">
                         <MessageSquare className="w-4 h-4 text-[#6b7385]" />
                         <h5 className="text-xs font-bold text-[#111a2e] uppercase tracking-wider">
-                          Feedbacks e Orientações ({feedbacks.length})
+                          Feedbacks do Orientador ({feedbacks.length})
                         </h5>
                       </div>
 
                       {feedbacks.length === 0 ? (
-                        <p className="text-xs text-[#6b7385] italic">
-                          Nenhum feedback registrado ainda para este marco.
-                        </p>
+                        <p className="text-xs text-[#6b7385] italic">Nenhum feedback registrado ainda para este marco.</p>
                       ) : (
                         <div className="space-y-2.5">
                           {feedbacks.map((f) => (
@@ -638,9 +639,7 @@ export function PainelTccModular({
                               className="p-3.5 rounded-lg bg-[#f4f5f7] border-l-4 border-[#1e78f0] space-y-1"
                             >
                               <div className="flex justify-between items-baseline text-[11px] text-[#6b7385]">
-                                <span className="font-semibold text-[#111a2e]">
-                                  {f.autorNome}
-                                </span>
+                                <span className="font-semibold text-[#111a2e]">{f.autorNome}</span>
                                 <span>{formatarDataHora(f.data)}</span>
                               </div>
                               <p className="text-xs text-[#111a2e]">{f.comentario}</p>
