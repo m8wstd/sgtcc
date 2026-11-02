@@ -12,7 +12,8 @@ export function getStatusVariant(status: string): "green" | "yellow" | "red" | "
     s.includes("conclu") ||
     s.includes("aprovad") ||
     s.includes("corrigid") ||
-    s.includes("enviad")
+    s.includes("enviad") ||
+    s.includes("avaliada")
   ) {
     return "green";
   }
@@ -34,7 +35,12 @@ export function getStatusVariant(status: string): "green" | "yellow" | "red" | "
   ) {
     return "red";
   }
-  if (s.includes("andamento") || s.includes("banca") || s.includes("defendid")) {
+  if (
+    s.includes("andamento") ||
+    s.includes("banca") ||
+    s.includes("defendid") ||
+    s.includes("em avalia")
+  ) {
     return "blue";
   }
   return "neutral";
