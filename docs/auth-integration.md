@@ -3,7 +3,7 @@
 ## Configuração pendente
 
 O projeto não contém credenciais, usuários ou configuração de um provedor SSO
-institucional. A integração permanece desativada enquanto
+institucional. O fluxo SSO permanece desativado enquanto
 `NEXT_PUBLIC_FIREBASE_AUTH_PROVIDER_ID` não estiver preenchida.
 
 O valor deve corresponder ao provider ID configurado no Firebase Authentication.
@@ -19,7 +19,19 @@ O Firebase Admin exige `FIREBASE_PROJECT_ID` e credenciais disponíveis no
 ambiente de execução. A chave de serviço não deve ser commitada; use
 `FIREBASE_SERVICE_ACCOUNT_KEY` somente como segredo de ambiente.
 
-## Sessão
+## Login em uso e limitações
+
+A tela de login da branch `dev` foi mantida nesta feature para não interromper
+os usuários enquanto o SSO institucional não está configurado. Ela usa
+`POST /api/auth/login-credenciais` e autentica e-mail/senha no Firebase Auth.
+Esse fluxo não verifica `emailVerified`, provider institucional ou domínio
+permitido. A rota também usa o perfil do Firestore com fallback para `ALUNO` e
+não deve ser tratado como validação institucional adequada para produção.
+
+O código SSO abaixo continua disponível, mas só pode ser usado depois de
+configurar o provider e a política de domínio nos ambientes correspondentes.
+
+## Sessão SSO
 
 O cliente inicia o SSO e envia o ID token Firebase para
 `POST /api/auth/session`. Antes disso, obtém um token de dupla submissão em
@@ -33,8 +45,19 @@ O cliente inicia o SSO e envia o ID token Firebase para
 - perfil válido na coleção `usuarios`.
 
 Depois da validação, o servidor cria o cookie `sgtcc_session` com `HttpOnly`,
-`SameSite=Lax` e `Secure` em produção. O fluxo não implementa autenticação por
-e-mail e senha.
+`SameSite=Lax` e `Secure` em produção.
+
+## Correção crítica pendente: cadastro público
+
+**CRÍTICO — tratar imediatamente em uma branch separada e revisar pela equipe.**
+`POST /api/auth/cadastro` ainda aceita do cliente `perfil`, e-mail e matrícula;
+o endpoint cria a conta, marca o e-mail como verificado sem prova e atribui
+custom claims. Uma chamada direta pode, portanto, solicitar `ADMIN` ou
+`COORDENACAO`, além de falsificar matrícula e identidade. A interface pública
+também oferece cadastro. Não use esse fluxo para provisionar contas confiáveis
+nem exponha esta revisão como correção do problema. A remediação precisa definir
+um mecanismo institucional de provisionamento, negar papéis privilegiados a
+requisições públicas e incluir testes de autorização antes da integração.
 
 ## Resolução do perfil e IDs
 
