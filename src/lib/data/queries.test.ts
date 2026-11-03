@@ -34,6 +34,10 @@ describe("perfis", () => {
   it("cada perfil tem home dentro de /dashboard", () => {
     for (const p of Object.values(PerfilEnum)) expect(homeDoPerfil(p)).toMatch(/^\/dashboard\//);
   });
+  it("direciona ADMIN ao dashboard exclusivo e preserva a home da Coordenação", () => {
+    expect(homeDoPerfil(PerfilEnum.ADMIN)).toBe("/dashboard/admin");
+    expect(homeDoPerfil(PerfilEnum.COORDENACAO)).toBe("/dashboard/coordenacao");
+  });
   it("destinoSeguro só aceita caminhos internos do dashboard", () => {
     expect(destinoSeguro("/dashboard/tcc/abc")).toBe("/dashboard/tcc/abc");
     expect(destinoSeguro("https://evil.com")).toBeNull();
