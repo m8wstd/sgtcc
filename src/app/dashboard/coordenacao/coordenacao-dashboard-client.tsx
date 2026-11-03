@@ -18,6 +18,8 @@ import {
   X,
   Check,
   Building,
+  Download,
+  AlertTriangle,
 } from "lucide-react";
 
 interface CoordenacaoDashboardClientProps {
@@ -39,6 +41,7 @@ export function CoordenacaoDashboardClient({
 
   // Modais de Gestão da Coordenação
   const [modalAlocacao, setModalAlocacao] = useState(false);
+  const [modalBanca, setModalBanca] = useState(false);
   const [modalCronograma, setModalCronograma] = useState(false);
   const [modalTrocaOrientador, setModalTrocaOrientador] = useState(false);
   const [alertaSucesso, setAlertaSucesso] = useState<string | null>(null);
@@ -46,6 +49,29 @@ export function CoordenacaoDashboardClient({
   // Estados dos formulários da coordenação
   const [trocaAlunoId, setTrocaAlunoId] = useState("");
   const [novoOrientadorNome, setNovoOrientadorNome] = useState("");
+
+  const [cronograma, setCronograma] = useState([
+    { etapa: "1. Submissão da Introdução e Objetivos", data: "2026-07-15" },
+    { etapa: "2. Referencial Teórico e Revisão Bibliográfica", data: "2026-08-12" },
+    { etapa: "3. Metodologia e Instrumentos", data: "2026-09-09" },
+    { etapa: "4. Apresentação dos Resultados", data: "2026-10-07" },
+    { etapa: "5. Entrega Final da Monografia à Banca", data: "2026-11-30" },
+  ]);
+
+  const [bancaTcc, setBancaTcc] = useState("");
+  const [bancaData, setBancaData] = useState("");
+  const pendentes = tccs.filter((t) => t.statusGeral === "EM_ANDAMENTO");
+
+  const avisar = (msg: string) => {
+    setAlertaSucesso(msg);
+    setTimeout(() => setAlertaSucesso(null), 5000);
+  };
+
+  const cargaOrientadores = useMemo(() => {
+    const m = new Map<string, number>();
+    tccs.forEach((t) => m.set(t.orientadorNome, (m.get(t.orientadorNome) ?? 0) + 1));
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+  }, [tccs]);
 
   const cursosDisponiveis = useMemo(() => {
     const setC = new Set<string>();
@@ -122,6 +148,17 @@ export function CoordenacaoDashboardClient({
         </div>
       )}
 
+      {pendentes.length > 0 && (
+        <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg text-xs flex items-center gap-2 flex-wrap">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <b>{pendentes.length} TCC(s) com entrega pendente:</b>
+          <span>{pendentes.map((t) => t.alunoNome).join(", ")}</span>
+          <button type="button" onClick={() => avisar("Lembrete enviado aos alunos e orientadores.")} className="underline font-semibold cursor-pointer">
+            Enviar lembrete
+          </button>
+        </div>
+      )}
+
       {/* Cards de Métricas da Coordenação */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         <StatCard
@@ -153,7 +190,20 @@ export function CoordenacaoDashboardClient({
       </div>
 
       {/* Ações da Coordenação de TCC */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <button
+          type="button"
+          onClick={() => setModalBanca(true)}
+          className="text-left border border-[#dfe2e8] rounded-[10px] p-5 bg-[#f4f5f7] hover:bg-white hover:border-[#1e78f0] transition-all cursor-pointer shadow-2xs group"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2.5 rounded-full bg-rose-100 text-rose-700 shrink-0">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <h3 className="text-xs font-bold text-[#111a2e] group-hover:text-[#1e78f0]">Agendar Banca</h3>
+          </div>
+          <p className="text-xs text-[#6b7385] leading-relaxed">Definir data, local e avaliadores.</p>
+        </button>
         <button
           type="button"
           onClick={() => setModalAlocacao(true)}
@@ -205,6 +255,23 @@ export function CoordenacaoDashboardClient({
           </div>
           <p className="text-xs text-[#6b7385] leading-relaxed">
             Transferir aluno para outro docente preservando histórico de entregas.
+          </p>
+        </button>
+        <button
+          type="button"
+          onClick={() => avisar("Relatório geral de TCCs gerado (protótipo): sgtcc-relatorio-2026-2.xlsx")}
+          className="text-left border border-[#dfe2e8] rounded-[10px] p-5 bg-[#f4f5f7] hover:bg-white hover:border-[#1e78f0] transition-all cursor-pointer shadow-2xs group"
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2.5 rounded-full bg-purple-100 text-purple-700 shrink-0">
+              <Download className="w-5 h-5" />
+            </div>
+            <h3 className="text-xs font-bold text-[#111a2e] group-hover:text-[#1e78f0]">
+              Exportar Relatório
+            </h3>
+          </div>
+          <p className="text-xs text-[#6b7385] leading-relaxed">
+            Baixar planilha com andamento, orientadores e status de todos os TCCs.
           </p>
         </button>
       </div>
@@ -288,77 +355,109 @@ export function CoordenacaoDashboardClient({
         </form>
       )}
 
-      {/* Modal Informativo de Cronograma */}
+      {/* Cronograma editável */}
       {modalCronograma && (
         <div className="border-2 border-[#1e78f0] rounded-[10px] p-5 bg-white shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-[#dfe2e8] pb-3">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-[#1e78f0]" />
-              <h3 className="text-sm font-bold text-[#111a2e]">
-                Cronograma Institucional do Semestre (2026/2)
-              </h3>
+              <h3 className="text-sm font-bold text-[#111a2e]">Cronograma Institucional do Semestre (2026/2)</h3>
             </div>
-            <button
-              type="button"
-              onClick={() => setModalCronograma(false)}
-              className="text-[#6b7385] hover:text-[#111a2e] cursor-pointer"
-            >
+            <button type="button" onClick={() => setModalCronograma(false)} className="text-[#6b7385] hover:text-[#111a2e] cursor-pointer">
               <X className="w-4 h-4" />
             </button>
           </div>
           <div className="space-y-2 text-xs text-[#111a2e]">
-            <div className="flex justify-between p-2.5 bg-[#f4f5f7] rounded-lg">
-              <b>1. Submissão da Introdução e Objetivos</b>
-              <span>15/07/2026</span>
-            </div>
-            <div className="flex justify-between p-2.5 bg-[#f4f5f7] rounded-lg">
-              <b>2. Referencial Teórico e Revisão Bibliográfica</b>
-              <span>12/08/2026</span>
-            </div>
-            <div className="flex justify-between p-2.5 bg-[#f4f5f7] rounded-lg">
-              <b>3. Metodologia e Instrumentos</b>
-              <span>09/09/2026</span>
-            </div>
-            <div className="flex justify-between p-2.5 bg-[#f4f5f7] rounded-lg">
-              <b>4. Apresentação dos Resultados</b>
-              <span>07/10/2026</span>
-            </div>
-            <div className="flex justify-between p-2.5 bg-[#f4f5f7] rounded-lg">
-              <b>5. Entrega Final da Monografia à Banca</b>
-              <span>30/11/2026</span>
-            </div>
+            {cronograma.map((c, i) => (
+              <div key={c.etapa} className="flex items-center justify-between gap-3 p-2.5 bg-[#f4f5f7] rounded-lg">
+                <b>{c.etapa}</b>
+                <input
+                  type="date"
+                  value={c.data}
+                  onChange={(e) => setCronograma(cronograma.map((x, j) => (j === i ? { ...x, data: e.target.value } : x)))}
+                  className="px-2 py-1 border border-[#dfe2e8] rounded-lg bg-white text-xs"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => { setModalCronograma(false); avisar("Cronograma atualizado e alunos/orientadores notificados."); }}
+              className="px-4 py-1.5 bg-[#1e78f0] text-white text-xs font-semibold rounded-lg cursor-pointer"
+            >
+              Salvar e Notificar
+            </button>
           </div>
         </div>
       )}
 
-      {/* Modal de Alocação de Orientadores */}
+      {/* Alocação de Orientadores */}
       {modalAlocacao && (
         <div className="border-2 border-[#1e78f0] rounded-[10px] p-5 bg-white shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-[#dfe2e8] pb-3">
             <div className="flex items-center gap-2">
               <FileSpreadsheet className="w-4 h-4 text-[#1e78f0]" />
-              <h3 className="text-sm font-bold text-[#111a2e]">
-                Alocação e Lotes Semestrais de Orientadores
-              </h3>
+              <h3 className="text-sm font-bold text-[#111a2e]">Alocação e Carga de Orientadores</h3>
             </div>
-            <button
-              type="button"
-              onClick={() => setModalAlocacao(false)}
-              className="text-[#6b7385] hover:text-[#111a2e] cursor-pointer"
-            >
+            <button type="button" onClick={() => setModalAlocacao(false)} className="text-[#6b7385] hover:text-[#111a2e] cursor-pointer">
               <X className="w-4 h-4" />
             </button>
           </div>
-          <p className="text-xs text-[#6b7385]">
-            O sistema gerencia lotes de mais de 20 orientandos por docente de forma centralizada.
-          </p>
+          <div className="space-y-2">
+            {cargaOrientadores.map(([nome, qtd]) => (
+              <div key={nome} className="flex items-center gap-3 text-xs">
+                <span className="w-48 truncate font-medium text-[#111a2e]">{nome}</span>
+                <div className="flex-1 h-2 bg-[#f4f5f7] rounded-full overflow-hidden">
+                  <div className="h-full bg-[#1e78f0]" style={{ width: `${Math.min(100, qtd * 10)}%` }} />
+                </div>
+                <span className="w-24 text-right text-[#6b7385]">{qtd} orientando(s)</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => { setModalAlocacao(false); setModalTrocaOrientador(true); }}
+              className="px-4 py-1.5 border border-[#dfe2e8] text-xs font-semibold rounded-lg cursor-pointer"
+            >
+              Reatribuir orientando
+            </button>
+            <button type="button" onClick={() => setModalAlocacao(false)} className="px-4 py-1.5 bg-[#1e78f0] text-white text-xs font-semibold rounded-lg cursor-pointer">
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {modalBanca && (
+        <div className="border-2 border-[#1e78f0] rounded-[10px] p-5 bg-white shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-[#dfe2e8] pb-3">
+            <h3 className="text-sm font-bold text-[#111a2e]">Agendar Banca de Defesa</h3>
+            <button type="button" onClick={() => setModalBanca(false)} className="text-[#6b7385] cursor-pointer"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <select value={bancaTcc} onChange={(e) => setBancaTcc(e.target.value)} className="px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg bg-white">
+              <option value="">Selecione o trabalho...</option>
+              {tccs.filter((t) => t.statusGeral === "AGUARDANDO_BANCA").map((t) => (
+                <option key={t.id} value={t.id}>{t.alunoNome} — {t.titulo}</option>
+              ))}
+            </select>
+            <input type="datetime-local" value={bancaData} onChange={(e) => setBancaData(e.target.value)} className="px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg" />
+            <input placeholder="Local / Sala" className="px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg" />
+            <input placeholder="Avaliadores" className="px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg" />
+          </div>
           <div className="flex justify-end">
             <button
               type="button"
-              onClick={() => setModalAlocacao(false)}
-              className="px-4 py-1.5 bg-[#1e78f0] text-white text-xs font-semibold rounded-lg"
+              onClick={() => {
+                if (!bancaTcc || !bancaData) return;
+                setModalBanca(false);
+                avisar("Banca agendada! Convocação enviada ao aluno, orientador e avaliadores.");
+              }}
+              className="px-5 py-1.5 bg-[#1e78f0] text-white text-xs font-bold rounded-lg cursor-pointer"
             >
-              Fechar
+              Agendar e Convocar
             </button>
           </div>
         </div>
