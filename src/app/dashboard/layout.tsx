@@ -1,9 +1,10 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { LayoutDashboard } from "lucide-react";
+import { FolderUp, LayoutDashboard } from "lucide-react";
 import { requireSessao } from "@/lib/auth/server-session";
 import { ROTULO_PERFIL, homeDoPerfil } from "@/lib/auth/perfis";
+import { PerfilEnum } from "@/types";
 import { LogoutButton } from "@/components/layout/logout-button";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,15 @@ async function Sidebar() {
             <LayoutDashboard className="h-4 w-4" />
             <span>Dashboard</span>
           </Link>
+          {sessao.perfil === PerfilEnum.ALUNO && (
+            <Link
+              href="/dashboard/aluno/entregas"
+              className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-blue-100 hover:bg-[#1a2a4a] hover:text-white text-sm font-semibold transition-colors"
+            >
+              <FolderUp className="h-4 w-4" />
+              <span>Central de Entregas</span>
+            </Link>
+          )}
         </nav>
       </div>
 

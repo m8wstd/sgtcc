@@ -82,6 +82,8 @@ export interface MarcoCronograma {
   titulo: string;
   dataLimite: Date | string;
   cronograma_id: string;
+  /** Se true, o sistema recusa envios de arquivo depois de `dataLimite` (RF03). */
+  bloqueioEstrito?: boolean;
 }
 
 export interface Entrega {
