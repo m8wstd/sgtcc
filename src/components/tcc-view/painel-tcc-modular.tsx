@@ -220,7 +220,7 @@ export function PainelTccModular({
       {saudacaoNome && (
         <div className="border-b border-[#dfe2e8] pb-3">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
-            {isOrientador ? `Acompanhamento &bull; ${tcc.alunoNome}` : `Olá, ${saudacaoNome}`}
+            {isOrientador ? `Acompanhamento • ${tcc.alunoNome}` : `Olá, ${saudacaoNome}`}
           </h1>
           <p className="text-sm text-[#6b7385] mt-1">
             {subtitulo ??
