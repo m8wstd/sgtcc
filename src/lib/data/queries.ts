@@ -102,8 +102,19 @@ export async function listarTccsVisiveis(sessao: AuthenticatedSession): Promise<
       lista = [...porTcc.values()];
       break;
     }
+    case PerfilEnum.COORDENACAO: {
+      const coord = await buscarPorUsuario("coordenadores", usuarioId);
+      const cursosPermitidos: string[] = coord?.data()?.cursos ?? [];
+      const todosTccs = docs<TCC>(await tccs.get());
+      if (cursosPermitidos && cursosPermitidos.length > 0) {
+        lista = todosTccs.filter((t) => t.curso && cursosPermitidos.includes(t.curso));
+      } else {
+        lista = todosTccs;
+      }
+      break;
+    }
     default:
-      lista = docs<TCC>(await tccs.get()); // coordenação/admin veem todos
+      lista = docs<TCC>(await tccs.get()); // admin vê todos
   }
 
   return (await enriquecer(lista)).sort((a, b) => a.titulo.localeCompare(b.titulo, "pt-BR"));

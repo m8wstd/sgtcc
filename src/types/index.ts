@@ -56,6 +56,7 @@ export interface ProfessorAvaliador {
 export interface Coordenador {
   id: string;
   usuario_id: string;
+  cursos?: string[]; // Cursos alocados pelo ADMIN para este coordenador
   usuario?: Usuario;
 }
 

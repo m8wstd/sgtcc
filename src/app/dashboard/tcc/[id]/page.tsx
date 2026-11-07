@@ -31,7 +31,7 @@ async function Painel({ params }: { params: Promise<{ id: string }> }) {
           href={homeDoPerfil(sessao.perfil)}
           className="inline-flex items-center gap-2 rounded-lg bg-[#1e78f0] px-4 py-2 text-sm font-medium text-white hover:bg-[#1666d3]"
         >
-          <ArrowLeft className="h-4 w-4" /> Voltar ao Meu Dashboard
+          <ArrowLeft className="h-4 w-4" /> Voltar ao Início
         </Link>
       </div>
     );
@@ -50,12 +50,17 @@ async function Painel({ params }: { params: Promise<{ id: string }> }) {
     );
   }
 
+  const isOrientadorOuGestor =
+    sessao.perfil === PerfilEnum.ORIENTADOR ||
+    sessao.perfil === PerfilEnum.COORDENACAO ||
+    sessao.perfil === PerfilEnum.ADMIN;
+
   return (
     <TccDetalheClient
       painel={painel}
       voltarHref={homeDoPerfil(sessao.perfil)}
       isAluno={sessao.perfil === PerfilEnum.ALUNO}
-      isOrientador={sessao.perfil === PerfilEnum.ORIENTADOR}
+      isOrientador={isOrientadorOuGestor}
       isAvaliador={false}
     />
   );

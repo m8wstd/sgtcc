@@ -20,41 +20,43 @@ export function AlunoDashboardClient({
 }: AlunoDashboardClientProps) {
   const tccPrincipal = tccs.find((t) => t.id === tccIdAtivo) ?? tccs[0] ?? null;
 
-  // Se tiver itens reais do Firestore no detalhesPrincipal, usamos eles.
-  // Senão, mapeamos do SALAS_ETAPAS_MOCK para a mesma interface ItemMarco.
-  const itens: ItemMarco[] = detalhesPrincipal?.itens?.length
-    ? detalhesPrincipal.itens
-    : SALAS_ETAPAS_MOCK.map((etapa, idx) => {
-        let statusEfetivo: "CONCLUIDA" | "PRONTA_PARA_REVISAO" | "EM_REVISAO" | "SOLICITADA_CORRECAO" | "AGUARDANDO_ENVIO" = "AGUARDANDO_ENVIO";
-        if (etapa.statusKanban === "Concluído") statusEfetivo = "CONCLUIDA";
-        else if (etapa.statusKanban === "Em andamento") statusEfetivo = "PRONTA_PARA_REVISAO";
-        else if (etapa.statusKanban === "Para correção") statusEfetivo = "EM_REVISAO";
-        else if (etapa.statusKanban === "Em correção") statusEfetivo = "SOLICITADA_CORRECAO";
+  // Mock fidedigno das etapas do aluno com dados fictícios do protótipo
+  const itensMock: ItemMarco[] = SALAS_ETAPAS_MOCK.map((etapa, idx) => {
+    let statusEfetivo: "CONCLUIDA" | "PRONTA_PARA_REVISAO" | "EM_REVISAO" | "SOLICITADA_CORRECAO" | "AGUARDANDO_ENVIO" = "AGUARDANDO_ENVIO";
+    if (etapa.statusKanban === "Concluído") statusEfetivo = "CONCLUIDA";
+    else if (etapa.statusKanban === "Em andamento") statusEfetivo = "PRONTA_PARA_REVISAO";
+    else if (etapa.statusKanban === "Para correção") statusEfetivo = "EM_REVISAO";
+    else if (etapa.statusKanban === "Em correção") statusEfetivo = "SOLICITADA_CORRECAO";
 
-        return {
-          marco: {
-            id: `marco-${idx + 1}`,
-            titulo: etapa.titulo,
-            dataLimite: new Date("2026-10-28T00:00:00.000Z"),
-            cronograma_id: "cronograma-padrao",
-          },
-          entrega: null,
-          statusEfetivo,
-          versoes: [],
-          feedbacks: etapa.comentarioOrientadora
-            ? [
-                {
-                  id: `fb-${idx + 1}`,
-                  entrega_id: `ent-${idx + 1}`,
-                  autor_id: "orientador-padrao",
-                  autorNome: "Prof.ª Joana Jordão",
-                  comentario: etapa.comentarioOrientadora,
-                  data: new Date("2026-10-20T14:30:00.000Z"),
-                },
-              ]
-            : [],
-        };
-      });
+    return {
+      marco: {
+        id: `marco-${idx + 1}`,
+        titulo: etapa.titulo,
+        dataLimite: new Date(
+          etapa.dataEntrega.split("/").reverse().join("-") + "T23:59:00.000Z"
+        ),
+        cronograma_id: "cronograma-padrao",
+      },
+      entrega: null,
+      statusEfetivo,
+      versoes: [],
+      feedbacks: etapa.comentarioOrientadora
+        ? [
+            {
+              id: `fb-${idx + 1}`,
+              entrega_id: `ent-${idx + 1}`,
+              autor_id: "orientador-padrao",
+              autorNome: "Prof.ª Joana Jordão",
+              comentario: etapa.comentarioOrientadora,
+              data: new Date("2026-10-20T14:30:00.000Z"),
+            },
+          ]
+        : [],
+    };
+  });
+
+  // Prioriza as etapas ricas fictícias do frontend
+  const itens: ItemMarco[] = itensMock;
 
   const tccMock: TccResumo = tccPrincipal ?? {
     id: "tcc-principal",

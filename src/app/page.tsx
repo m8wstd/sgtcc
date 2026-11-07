@@ -32,10 +32,10 @@ export default function Home() {
             Entrar
           </Link>
           <Link
-            href="/login?tab=cadastro"
+            href="/login?tab=criar-senha"
             className="flex items-center justify-center w-full h-11 border border-[#dfe2e8] bg-white hover:bg-[#f4f5f7] text-[#111a2e] font-semibold text-sm rounded-lg transition-colors"
           >
-            Cadastrar
+            Criar senha de acesso
           </Link>
         </div>
 

@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { homeDoPerfil } from "@/lib/auth/perfis";
+import { validarSenhaSegura, validarEmail } from "@/lib/auth/cadastro-tokens";
 import type { PerfilEnum } from "@/types";
 
 export async function POST(request: Request) {
   if (!adminAuth || !adminDb) {
     return NextResponse.json(
       { error: "CONFIG_ERROR", message: "Serviço Firebase Admin indisponível." },
-      { status: 503 },
+      { status: 503 }
     );
   }
 
@@ -17,43 +18,113 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json(
       { error: "INVALID_REQUEST", message: "Corpo da requisição inválido." },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
-  const { nome, email, password, perfil, matricula } =
-    (body as {
-      nome?: string;
-      email?: string;
-      password?: string;
-      perfil?: PerfilEnum;
-      matricula?: string;
-    }) ?? {};
+  const { token, password } = (body as { token?: string; password?: string }) ?? {};
 
-  if (!nome || !email || !password || !perfil) {
+  if (!token) {
     return NextResponse.json(
-      { error: "MISSING_FIELDS", message: "Preencha todos os campos obrigatórios." },
-      { status: 400 },
+      {
+        error: "TOKEN_REQUIRED",
+        message: "O cadastro na plataforma requer um convite ou link válido emitido pela administração.",
+      },
+      { status: 403 }
     );
   }
 
-  if (password.length < 6) {
+  if (!password) {
     return NextResponse.json(
-      { error: "WEAK_PASSWORD", message: "A senha deve conter no mínimo 6 caracteres." },
-      { status: 400 },
+      { error: "PASSWORD_REQUIRED", message: "Defina sua senha de acesso." },
+      { status: 400 }
     );
   }
 
-  const perfisValidos = ["ALUNO", "ORIENTADOR", "COORDENACAO", "AVALIADOR", "ADMIN"];
-  if (!perfisValidos.includes(perfil)) {
+  // Validação de senha segura:
+  // - Pelo menos 8 caracteres, no máximo 32
+  // - Pelo menos 1 maiúscula, 1 minúscula, 1 número, 1 símbolo
+  const validacao = validarSenhaSegura(password);
+  if (!validacao.valida) {
     return NextResponse.json(
-      { error: "INVALID_ROLE", message: "Perfil institucional inválido." },
-      { status: 400 },
+      {
+        error: "WEAK_PASSWORD",
+        message: validacao.erros[0] || "A senha não atende aos requisitos de segurança.",
+        erros: validacao.erros,
+      },
+      { status: 400 }
+    );
+  }
+
+  // 1. Busca o token no banco
+  let conviteDoc;
+  try {
+    conviteDoc = await adminDb.collection("convites_cadastro").doc(token).get();
+  } catch (err) {
+    console.error("Erro ao buscar convite:", err);
+    return NextResponse.json({ error: "DB_ERROR", message: "Erro ao consultar token." }, { status: 500 });
+  }
+
+  if (!conviteDoc.exists) {
+    return NextResponse.json(
+      {
+        error: "INVALID_TOKEN",
+        message: "Link de cadastro inválido ou não encontrado. Solicite um novo link ao administrador.",
+      },
+      { status: 404 }
+    );
+  }
+
+  const convite = conviteDoc.data();
+  if (!convite) {
+    return NextResponse.json({ error: "INVALID_TOKEN", message: "Convite corrompido." }, { status: 400 });
+  }
+
+  // 2. Se alguém se cadastra, queima o token!
+  if (convite.usado) {
+    return NextResponse.json(
+      {
+        error: "TOKEN_ALREADY_USED",
+        message: "Este link de convite já foi utilizado para cadastro e foi queimado.",
+      },
+      { status: 410 }
+    );
+  }
+
+  // 3. Se alguém ignora o link por mais de uma semana, também queima o token!
+  const agora = Date.now();
+  const dataExpira = convite.expiraEm ? new Date(convite.expiraEm).getTime() : 0;
+  if (dataExpira < agora) {
+    // Queima o token expirado
+    await conviteDoc.ref.update({ usado: true, expirado: true });
+    return NextResponse.json(
+      {
+        error: "TOKEN_EXPIRED",
+        message: "Este link de convite expirou (validade máxima de 1 semana) e foi queimado. Solicite novo link ao administrador.",
+      },
+      { status: 410 }
+    );
+  }
+
+  const { nome, email, perfil, matricula, curso, cursosCoordenados } = convite as {
+    nome: string;
+    email: string;
+    perfil: PerfilEnum;
+    matricula: string;
+    curso?: string;
+    cursosCoordenados?: string[];
+  };
+
+  // Validação sintática do e-mail
+  if (!validarEmail(email)) {
+    return NextResponse.json(
+      { error: "INVALID_EMAIL", message: "O e-mail cadastrado no convite é inválido." },
+      { status: 400 }
     );
   }
 
   try {
-    // 1. Cria usuário no Firebase Auth
+    // 4. Cria o usuário no Firebase Auth
     let uid: string;
     try {
       const userRecord = await adminAuth.createUser({
@@ -67,32 +138,35 @@ export async function POST(request: Request) {
       const err = authError as { code?: string; message?: string };
       if (err.code === "auth/email-already-exists") {
         return NextResponse.json(
-          { error: "EMAIL_EXISTS", message: "Este e-mail institucional já está cadastrado." },
-          { status: 409 },
+          { error: "EMAIL_EXISTS", message: "Este e-mail institucional já está cadastrado no sistema." },
+          { status: 409 }
         );
       }
       throw authError;
     }
 
-    // 2. Define Custom Claims
-    const matFinal = matricula?.trim() || (perfil === "ALUNO" ? `MAT-${Date.now().toString().slice(-6)}` : undefined);
+    // 5. Define Custom Claims
     await adminAuth.setCustomUserClaims(uid, {
       perfil,
-      ...(matFinal && { matricula: matFinal }),
+      ...(matricula && { matricula: matricula.trim() }),
     });
 
-    // 3. Salva documento na coleção usuarios
+    // 6. Salva documento na coleção usuarios
     await adminDb.collection("usuarios").doc(uid).set({
       id: uid,
       nome: nome.trim(),
       email: email.trim().toLowerCase(),
       perfil,
+      matricula: matricula.trim(),
+      ...(curso && { curso: curso.trim() }),
+      ...(cursosCoordenados && { cursosCoordenados }),
+      criadoEm: new Date().toISOString(),
     });
 
-    // 4. Salva registro na tabela do papel específico (conforme diagrama ER)
-    if (perfil === "ALUNO" && matFinal) {
-      await adminDb.collection("alunos").doc(matFinal).set({
-        matricula: matFinal,
+    // 7. Salva registro na tabela de papel específico
+    if (perfil === "ALUNO" && matricula) {
+      await adminDb.collection("alunos").doc(matricula).set({
+        matricula,
         usuario_id: uid,
       });
     } else if (perfil === "ORIENTADOR") {
@@ -109,25 +183,34 @@ export async function POST(request: Request) {
       await adminDb.collection("coordenadores").doc(uid).set({
         id: uid,
         usuario_id: uid,
+        cursos: cursosCoordenados ?? [curso ?? "Engenharia de Software"],
       });
     }
 
+    // 8. Queima o token
+    await conviteDoc.ref.update({
+      usado: true,
+      usadoEm: new Date().toISOString(),
+      usuarioCriadoId: uid,
+    });
+
     return NextResponse.json({
       success: true,
-      message: "Cadastro institucional realizado com sucesso!",
+      message: "Cadastro concluído com sucesso!",
+      redirectTo: homeDoPerfil(perfil),
       user: {
         uid,
-        email: email.trim().toLowerCase(),
-        nome: nome.trim(),
+        email,
+        nome,
         perfil,
+        matricula,
       },
-      redirectTo: homeDoPerfil(perfil),
     });
   } catch (error) {
-    console.error("Erro no cadastro:", error);
+    console.error("Erro no cadastro via token:", error);
     return NextResponse.json(
-      { error: "INTERNAL_ERROR", message: "Erro ao processar cadastro no banco de dados." },
-      { status: 500 },
+      { error: "SERVER_ERROR", message: "Erro ao concluir cadastro." },
+      { status: 500 }
     );
   }
 }
