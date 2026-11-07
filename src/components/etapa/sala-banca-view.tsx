@@ -104,7 +104,7 @@ export function SalaBancaView({
               {tcc.titulo}
             </h1>
             <p className="text-xs sm:text-sm text-[#6b7385]">
-              Aluno: <b className="text-[#111a2e]">{tcc.alunoNome}</b> (Matrícula: {tcc.aluno_id}) &bull; Orientador:{" "}
+              Aluno: <b className="text-[#111a2e]">{tcc.alunoNome}</b> (Matrícula: {tcc.aluno_id}) • Orientador:{" "}
               <b className="text-[#111a2e]">{tcc.orientadorNome}</b>
             </p>
           </div>

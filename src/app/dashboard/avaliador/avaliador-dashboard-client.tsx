@@ -51,6 +51,7 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
   const [busca, setBusca] = useState("");
   const [viewMode, setViewMode] = useState<"kanban" | "lista">("kanban");
   const [tabFase, setTabFase] = useState<"todas" | "1" | "2">("todas");
+  const [statusAtivo, setStatusAtivo] = useState<"todos" | "Pendente" | "Para corrigir" | "Em correção" | "Concluído">("todos");
 
   const stats = useMemo(() => {
     const total = tccs.length;
@@ -70,6 +71,9 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
           ? t.fase === 1 || !t.fase
           : t.fase === 2;
 
+      const col = mapTccParaColunaBanca(t);
+      const matchStatus = statusAtivo === "todos" ? true : col === statusAtivo;
+
       const termo = busca.toLowerCase();
       const matchBusca =
         !termo ||
@@ -78,23 +82,23 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
         t.aluno_id.toLowerCase().includes(termo) ||
         t.orientadorNome.toLowerCase().includes(termo);
 
-      return matchFase && matchBusca;
+      return matchFase && matchStatus && matchBusca;
     });
-  }, [tccs, tabFase, busca]);
+  }, [tccs, tabFase, statusAtivo, busca]);
 
   return (
     <div className="space-y-6 w-full">
       {/* Cabeçalho */}
       <div className="border-b border-[#dfe2e8] pb-4">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
-          Olá, Prof. {nomeAvaliador}
+          Banca Examinadora
         </h1>
         <p className="text-sm text-[#6b7385] mt-1">
           Acompanhamento e avaliação direta dos alunos e projetos finais de banca examinadora (TCC 1 e TCC 2)
         </p>
       </div>
 
-      {/* Stats Cards com as métricas da Banca */}
+      {/* Stats Cards com as métricas da Banca e atalhos de busca/filtro */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         <StatCard
           label="Total de Bancas"
@@ -102,6 +106,8 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
           variant="blue"
           icon={<Award className="w-5 h-5" />}
           className="p-5"
+          onClick={() => setStatusAtivo("todos")}
+          active={statusAtivo === "todos"}
         />
         <StatCard
           label="Para Corrigir"
@@ -109,6 +115,8 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
           variant="yellow"
           icon={<FileText className="w-5 h-5" />}
           className="p-5"
+          onClick={() => setStatusAtivo(statusAtivo === "Para corrigir" ? "todos" : "Para corrigir")}
+          active={statusAtivo === "Para corrigir"}
         />
         <StatCard
           label="Em Correção"
@@ -116,6 +124,8 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
           variant="red"
           icon={<Clock className="w-5 h-5" />}
           className="p-5"
+          onClick={() => setStatusAtivo(statusAtivo === "Em correção" ? "todos" : "Em correção")}
+          active={statusAtivo === "Em correção"}
         />
         <StatCard
           label="Bancas Concluídas"
@@ -123,6 +133,8 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
           variant="green"
           icon={<CheckCircle2 className="w-5 h-5" />}
           className="p-5"
+          onClick={() => setStatusAtivo(statusAtivo === "Concluído" ? "todos" : "Concluído")}
+          active={statusAtivo === "Concluído"}
         />
       </div>
 

@@ -4,7 +4,7 @@ import { listarTccsVisiveis } from "@/lib/data/queries";
 import { PerfilEnum } from "@/types";
 import { OrientadorDashboardClient } from "./orientador-dashboard-client";
 
-export const metadata = { title: "Dashboard do Orientador — SGTCC" };
+export const metadata = { title: "Painel do Orientador — SGTCC" };
 export const dynamic = "force-dynamic";
 
 async function ConteudoOrientador() {

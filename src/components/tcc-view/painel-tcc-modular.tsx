@@ -16,6 +16,7 @@ import {
   Check,
   Award,
 } from "lucide-react";
+import { SALAS_ETAPAS_MOCK } from "@/app/dashboard/aluno/dados-etapas";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusPill } from "@/components/ui/status-pill";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -207,20 +208,18 @@ export function PainelTccModular({
         )}
       </div>
 
-      {/* Saudação */}
-      {saudacaoNome && (
-        <div className="border-b border-[#dfe2e8] pb-3">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
-            {isOrientador ? `Acompanhamento &bull; ${tcc.alunoNome}` : `Olá, ${saudacaoNome}`}
-          </h1>
-          <p className="text-sm text-[#6b7385] mt-1">
-            {subtitulo ??
-              (isOrientador
-                ? "Clique no cartão da etapa para abrir a sala, postar materiais, orientar e avaliar."
-                : "Acompanhe o andamento do seu TCC. Clique no cartão da etapa para acessar a sala.")}
-          </p>
-        </div>
-      )}
+      {/* Cabeçalho da Seção */}
+      <div className="border-b border-[#dfe2e8] pb-3">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
+          {isOrientador ? `Acompanhamento • ${tcc.alunoNome}` : "Plano de Trabalho do TCC"}
+        </h1>
+        <p className="text-sm text-[#6b7385] mt-1">
+          {subtitulo ??
+            (isOrientador
+              ? "Clique no cartão da etapa para abrir a sala, postar materiais, orientar e avaliar."
+              : "Acompanhe o andamento do seu TCC. Clique no cartão da etapa para acessar a sala.")}
+        </p>
+      </div>
 
       {/* Alerta de criação de etapa com sucesso */}
       {etapaCriadaSucesso && (
@@ -362,7 +361,7 @@ export function PainelTccModular({
               {tcc.titulo}
             </h2>
             <p className="text-xs text-[#6b7385]">
-              Aluno: <span className="font-semibold text-[#111a2e]">{tcc.alunoNome}</span> (Matrícula: {tcc.aluno_id}) &bull; Orientador:{" "}
+              Aluno: <span className="font-semibold text-[#111a2e]">{tcc.alunoNome}</span> (Matrícula: {tcc.aluno_id}) • Orientador:{" "}
               <span className="font-semibold text-[#111a2e]">{tcc.orientadorNome}</span>
             </p>
           </div>
@@ -475,13 +474,18 @@ export function PainelTccModular({
                         ? `/dashboard/tcc/${tcc.id}/etapa/${slug}`
                         : `/dashboard/aluno/etapa/${slug}`;
                       const atrasado = item.statusEfetivo === "ATRASADA";
-                      const ultimoFeedback = item.feedbacks[0]?.comentario ?? null;
+
+                      // Busca a última postagem ou material do professor na sala correspondente
+                      const mockEtapa = SALAS_ETAPAS_MOCK.find((s) => s.slug === slug);
+                      const ultimaPostagem = mockEtapa?.postagensProfessor?.[mockEtapa.postagensProfessor.length - 1];
+                      const ultimoMaterial = mockEtapa?.materiaisFixados?.[0];
+                      const ultimoFeedback = item.feedbacks[0];
 
                       return (
                         <Link
                           key={item.marco.id}
                           href={etapaHref}
-                          className={`block border rounded-[10px] p-3.5 bg-white space-y-2.5 shadow-2xs transition-all hover:border-[#1e78f0] hover:shadow-xs cursor-pointer group text-left ${
+                          className={`group relative block border rounded-xl p-3.5 bg-white space-y-2.5 shadow-2xs transition-all duration-200 hover:border-[#1e78f0] hover:shadow-md hover:-translate-y-0.5 cursor-pointer text-left ${
                             atrasado ? "border-red-300" : "border-[#dfe2e8]"
                           }`}
                         >
@@ -500,7 +504,7 @@ export function PainelTccModular({
                           {/* Prazo Limite */}
                           <div className="flex justify-between items-center text-[11px] text-[#6b7385] font-medium">
                             <span className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
+                              <Clock className="w-3 h-3 text-[#6b7385]" />
                               Prazo: {formatarData(item.marco.dataLimite)}
                             </span>
                             <span className="text-[10px] font-semibold text-[#1e78f0] bg-blue-50 px-1.5 py-0.5 rounded">
@@ -508,14 +512,32 @@ export function PainelTccModular({
                             </span>
                           </div>
 
-                          {/* Comentário da Orientadora / Orientador (Fiel ao protótipo) */}
-                          <div className="p-2.5 bg-[#f4f5f7] border-l-2 border-[#1e78f0] rounded-[4px] text-[11.5px] text-[#111a2e]">
-                            <b className="block text-[10px] text-[#6b7385] uppercase tracking-wider mb-0.5">
-                              Comentário da orientadora
-                            </b>
-                            <p className="line-clamp-2 leading-relaxed text-[#111a2e]">
-                              {ultimoFeedback ?? (col.key === "Pendente" ? "Bloco ainda não iniciado." : "Aguardando nova revisão.")}
+                          {/* Última Postagem / Comunicado do Professor */}
+                          <div className="p-2.5 bg-[#f8f9fa] border-l-2 border-[#1e78f0] rounded-[6px] text-[11.5px] text-[#111a2e] space-y-1">
+                            <div className="flex items-center justify-between text-[10px]">
+                              <b className="text-[#1e78f0] uppercase tracking-wider flex items-center gap-1">
+                                <MessageSquare className="w-3 h-3" />
+                                {ultimaPostagem ? "Última postagem do orientador" : "Orientação da sala"}
+                              </b>
+                              {ultimaPostagem && (
+                                <span className="text-[#9ca3af]">{ultimaPostagem.dataHora.split(" às ")[0]}</span>
+                              )}
+                            </div>
+                            <p className="line-clamp-2 leading-relaxed text-[#374151]">
+                              {ultimaPostagem
+                                ? `${ultimaPostagem.titulo} — ${ultimaPostagem.conteudo}`
+                                : ultimoFeedback
+                                ? ultimoFeedback.comentario
+                                : ultimoMaterial
+                                ? `Material disponibilizado: ${ultimoMaterial.nome}`
+                                : "Nenhuma publicação recente. Clique para abrir a sala da etapa."}
                             </p>
+                          </div>
+
+                          {/* Indicador sutil de que todo o card é clicável */}
+                          <div className="pt-1 flex items-center justify-end text-[10px] font-semibold text-[#6b7385] group-hover:text-[#1e78f0] transition-colors gap-1">
+                            <span>Acessar sala</span>
+                            <span className="transition-transform group-hover:translate-x-1">&rarr;</span>
                           </div>
                         </Link>
                       );
@@ -527,131 +549,68 @@ export function PainelTccModular({
           </div>
         </div>
       ) : (
-        /* Visualização em Lista */
-        <div className="space-y-4">
-          {itens.map(({ marco, entrega, statusEfetivo, versoes, feedbacks }, idx) => {
+        /* Visualização em Lista - Cada item é um card clicável com indicação sutil */
+        <div className="space-y-3.5">
+          {itens.map(({ marco, statusEfetivo }, idx) => {
             const statusLabel = ROTULO_STATUS_ENTREGA[statusEfetivo] ?? statusEfetivo;
-            const isConcluido = statusEfetivo === "CONCLUIDA";
             const slug = slugDoMarco(marco.titulo, idx);
             const etapaHref = isOrientador
               ? `/dashboard/tcc/${tcc.id}/etapa/${slug}`
               : `/dashboard/aluno/etapa/${slug}`;
+            const atrasado = statusEfetivo === "ATRASADA";
+
+            const mockEtapa = SALAS_ETAPAS_MOCK.find((s) => s.slug === slug);
+            const ultimaPostagem = mockEtapa?.postagensProfessor?.[mockEtapa.postagensProfessor.length - 1];
+            const ultimoMaterial = mockEtapa?.materiaisFixados?.[0];
 
             return (
-              <div
+              <Link
                 key={marco.id}
-                className="border border-[#dfe2e8] rounded-[10px] bg-white overflow-hidden shadow-xs"
+                href={etapaHref}
+                className="group relative block border border-[#dfe2e8] hover:border-[#1e78f0] rounded-xl bg-white overflow-hidden shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer p-4 sm:p-5"
               >
-                <div className="px-5 py-4 bg-[#f4f5f7] border-b border-[#dfe2e8] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h4 className="text-sm font-bold text-[#111a2e]">
-                      {idx + 1}. {marco.titulo}
-                    </h4>
-                    <p className="text-xs text-[#6b7385] flex items-center gap-1.5 mt-0.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-[#111a2e] group-hover:text-[#1e78f0] transition-colors truncate">
+                        {idx + 1}. {marco.titulo}
+                      </h4>
+                      {atrasado && (
+                        <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
+                          Atrasado
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-[#6b7385] flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-[#6b7385]" /> Prazo limite:{" "}
                       <span className="font-medium text-[#111a2e]">
                         {formatarData(marco.dataLimite)}
                       </span>
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={etapaHref}
-                      className="px-3 py-1 rounded-md bg-white border border-[#dfe2e8] hover:border-[#1e78f0] text-[#1e78f0] text-xs font-semibold flex items-center gap-1 transition-colors"
-                    >
-                      <span>Entrar na Sala da Etapa</span>
-                    </Link>
+
+                  <div className="flex items-center gap-3 self-end sm:self-center">
                     <StatusPill status={statusLabel} />
+                    <span className="text-xs font-semibold text-[#6b7385] group-hover:text-[#1e78f0] flex items-center gap-1 transition-colors">
+                      <span className="hidden sm:inline">Acessar sala</span>
+                      <span className="transition-transform group-hover:translate-x-1">&rarr;</span>
+                    </span>
                   </div>
                 </div>
 
-                <div className="p-5 sm:p-6 space-y-6">
-                  {/* Versões */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h5 className="text-xs font-bold text-[#111a2e] uppercase tracking-wider">
-                        Versões de Documentos Submetidas ({versoes.length})
-                      </h5>
-                      {!isOrientador && !isConcluido && (
-                        <Link
-                          href={etapaHref}
-                          className="text-xs font-medium text-[#1e78f0] flex items-center gap-1 cursor-pointer hover:underline"
-                        >
-                          <UploadCloud className="w-4 h-4" /> Nova versão na Sala
-                        </Link>
-                      )}
-                    </div>
-
-                    {versoes.length === 0 ? (
-                      <div className="p-4 rounded-lg border border-dashed border-[#dfe2e8] text-center bg-[#fafbfc]">
-                        <p className="text-xs text-[#6b7385]">
-                          Nenhum arquivo submetido para este marco ainda.
-                        </p>
-                      </div>
-                    ) : (
-                      <ul className="divide-y divide-[#dfe2e8] border border-[#dfe2e8] rounded-lg overflow-hidden bg-white">
-                        {versoes.map((v) => (
-                          <li
-                            key={v.id}
-                            className="px-4 py-3 flex items-center justify-between gap-4 hover:bg-[#f4f5f7] transition-colors"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <FileText className="w-4 h-4 text-[#1e78f0] shrink-0" />
-                              <div className="truncate">
-                                <span className="text-xs font-semibold text-[#111a2e]">
-                                  Versão {v.numeroVersao} &bull;{" "}
-                                  {v.arquivoUrl.split("/").pop()}
-                                </span>
-                                <span className="block text-[11px] text-[#6b7385]">
-                                  Enviado em {formatarDataHora(v.dataUpload)}
-                                </span>
-                              </div>
-                            </div>
-                            <span className="text-xs font-medium text-[#1e78f0] hover:underline cursor-pointer">
-                              Visualizar
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-
-                  {/* Feedbacks */}
-                  {entrega && (
-                    <div className="pt-2 border-t border-[#dfe2e8]">
-                      <div className="flex items-center gap-1.5 mb-3">
-                        <MessageSquare className="w-4 h-4 text-[#6b7385]" />
-                        <h5 className="text-xs font-bold text-[#111a2e] uppercase tracking-wider">
-                          Feedbacks e Orientações ({feedbacks.length})
-                        </h5>
-                      </div>
-
-                      {feedbacks.length === 0 ? (
-                        <p className="text-xs text-[#6b7385] italic">
-                          Nenhum feedback registrado ainda para este marco.
-                        </p>
-                      ) : (
-                        <div className="space-y-2.5">
-                          {feedbacks.map((f) => (
-                            <div
-                              key={f.id}
-                              className="p-3.5 rounded-lg bg-[#f4f5f7] border-l-4 border-[#1e78f0] space-y-1"
-                            >
-                              <div className="flex justify-between items-baseline text-[11px] text-[#6b7385]">
-                                <span className="font-semibold text-[#111a2e]">
-                                  {f.autorNome}
-                                </span>
-                                <span>{formatarDataHora(f.data)}</span>
-                              </div>
-                              <p className="text-xs text-[#111a2e]">{f.comentario}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
+                {/* Última publicação ou orientação do professor */}
+                <div className="mt-3 pt-3 border-t border-[#f0f2f5] flex items-start gap-2 text-xs text-[#6b7385]">
+                  <MessageSquare className="w-3.5 h-3.5 text-[#1e78f0] shrink-0 mt-0.5" />
+                  <p className="line-clamp-1 text-[#374151]">
+                    <b className="text-[#1e78f0] font-semibold mr-1">Última postagem:</b>
+                    {ultimaPostagem
+                      ? `${ultimaPostagem.titulo} — ${ultimaPostagem.conteudo}`
+                      : ultimoMaterial
+                      ? `Material de apoio: ${ultimoMaterial.nome}`
+                      : "Clique para entrar e conferir as orientações e arquivos desta etapa."}
+                  </p>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>

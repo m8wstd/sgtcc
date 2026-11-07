@@ -372,8 +372,8 @@ export function SalaEtapaView({
               {tituloEtapa}
             </h1>
             <p className="text-xs sm:text-sm text-[#6b7385]">
-              {tccTitulo && <span className="font-medium text-[#111a2e]">{tccTitulo} &bull; </span>}
-              {alunoNome && <span>Aluno: <b className="text-[#111a2e]">{alunoNome}</b> &bull; </span>}
+              {tccTitulo && <span className="font-medium text-[#111a2e]">{tccTitulo} • </span>}
+              {alunoNome && <span>Aluno: <b className="text-[#111a2e]">{alunoNome}</b> • </span>}
               Prazo limite da sala: <b className="text-[#111a2e]">{dataEntrega}</b>
             </p>
           </div>

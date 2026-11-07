@@ -12,5 +12,8 @@ export default async function LoginPage({
   const { next, tab } = await searchParams;
   const destino = destinoSeguro(next) ?? "/dashboard";
 
-  return <LoginForm destino={destino} initialTab={tab === "cadastro" ? "cadastro" : "login"} />;
+  const initialTab =
+    tab === "criar-senha" ? "criar-senha" : tab === "esqueci-senha" ? "esqueci-senha" : "login";
+
+  return <LoginForm destino={destino} initialTab={initialTab} />;
 }

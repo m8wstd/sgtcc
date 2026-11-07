@@ -16,9 +16,21 @@ const PERFIS_USUARIO = [
 export type StatusCounts = Record<StatusGeralTCC, number>;
 export type UserCounts = Record<(typeof PERFIS_USUARIO)[number], number>;
 
+export interface AdminUsuarioItem {
+  id: string;
+  nome: string;
+  email: string;
+  perfil: (typeof PERFIS_USUARIO)[number];
+  matricula?: string;
+  curso?: string;
+  cursosCoordenados?: string[];
+  criadoEm?: string;
+}
+
 export interface AdminDashboardData {
   usuarios: UserCounts;
   totalUsuarios: number;
+  listaUsuarios: AdminUsuarioItem[];
   tccs: TccResumo[];
   totalTccs: number;
   tccsPorStatus: StatusCounts;
@@ -62,13 +74,18 @@ export async function getAdminDashboardData(
   requireAdmin(session);
   const db = firestore ?? getDb();
 
-  const [usuarios, totalUsuarios, tccs, entregaSnapshot, marcoSnapshot] = await Promise.all([
+  const [usuarios, totalUsuarios, usuariosSnapshot, tccs, entregaSnapshot, marcoSnapshot] = await Promise.all([
     countUsersByRole(db),
     db.collection("usuarios").count().get().then((result) => result.data().count),
+    db.collection("usuarios").get(),
     listarTccsVisiveis(session),
     db.collection("entregas").where("status", "in", ["AGUARDANDO_ENVIO", "ATRASADA"]).get(),
     db.collection("marcos_cronograma").get(),
   ]);
+
+  const listaUsuarios = records<AdminUsuarioItem>(usuariosSnapshot).sort((a, b) =>
+    a.nome.localeCompare(b.nome, "pt-BR")
+  );
 
   const tccsPorStatus: StatusCounts = {
     EM_ANDAMENTO: 0,
@@ -97,6 +114,7 @@ export async function getAdminDashboardData(
   return {
     usuarios,
     totalUsuarios,
+    listaUsuarios,
     tccs,
     totalTccs: tccs.length,
     tccsPorStatus,

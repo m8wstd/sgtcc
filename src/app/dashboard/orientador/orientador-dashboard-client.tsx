@@ -69,6 +69,7 @@ function mapAlunoParaColunaOrientador(t: TccResumo): ColunaOrientadorKey {
 export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDashboardClientProps) {
   const [faseAtiva, setFaseAtiva] = useState<TabFase>("todas");
   const [cursoAtivo, setCursoAtivo] = useState<string>("todos");
+  const [statusAtivo, setStatusAtivo] = useState<"todos" | "Pendente" | "Em revisão" | "Concluído">("todos");
   const [viewMode, setViewMode] = useState<"kanban" | "lista">("kanban");
   const [busca, setBusca] = useState("");
 
@@ -97,6 +98,8 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
           ? t.fase === 1 || !t.fase
           : t.fase === 2;
       const matchCurso = cursoAtivo === "todos" ? true : t.curso === cursoAtivo;
+      const col = mapAlunoParaColunaOrientador(t);
+      const matchStatus = statusAtivo === "todos" ? true : col === statusAtivo;
       const termo = busca.toLowerCase();
       const matchBusca =
         !termo ||
@@ -104,23 +107,23 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
         t.alunoNome.toLowerCase().includes(termo) ||
         t.aluno_id.toLowerCase().includes(termo);
 
-      return matchFase && matchCurso && matchBusca;
+      return matchFase && matchCurso && matchStatus && matchBusca;
     });
-  }, [tccs, faseAtiva, cursoAtivo, busca]);
+  }, [tccs, faseAtiva, cursoAtivo, statusAtivo, busca]);
 
   return (
     <div className="space-y-6 w-full">
       {/* Cabeçalho */}
       <div className="border-b border-[#dfe2e8] pb-4">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
-          Olá, Prof. {nomeOrientador}
+          Painel de Orientações
         </h1>
         <p className="text-sm text-[#6b7385] mt-1">
           Acompanhamento dos seus orientandos por status de entrega no semestre atual
         </p>
       </div>
 
-      {/* Stats Cards com as 3 métricas principais */}
+      {/* Stats Cards com as 3 métricas principais e atalhos de filtro */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         <StatCard
           label="Total de Orientandos"
@@ -128,6 +131,8 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
           variant="blue"
           icon={<Users className="w-5 h-5" />}
           className="p-5"
+          onClick={() => setStatusAtivo("todos")}
+          active={statusAtivo === "todos"}
         />
         <StatCard
           label="Pendente (Sem Entrega)"
@@ -135,6 +140,8 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
           variant="neutral"
           icon={<Clock className="w-5 h-5" />}
           className="p-5"
+          onClick={() => setStatusAtivo(statusAtivo === "Pendente" ? "todos" : "Pendente")}
+          active={statusAtivo === "Pendente"}
         />
         <StatCard
           label="Em Revisão"
@@ -142,6 +149,8 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
           variant="yellow"
           icon={<BookOpen className="w-5 h-5" />}
           className="p-5"
+          onClick={() => setStatusAtivo(statusAtivo === "Em revisão" ? "todos" : "Em revisão")}
+          active={statusAtivo === "Em revisão"}
         />
         <StatCard
           label="TCCs Concluídos"
@@ -149,6 +158,8 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
           variant="green"
           icon={<CheckCircle2 className="w-5 h-5" />}
           className="p-5"
+          onClick={() => setStatusAtivo(statusAtivo === "Concluído" ? "todos" : "Concluído")}
+          active={statusAtivo === "Concluído"}
         />
       </div>
 
