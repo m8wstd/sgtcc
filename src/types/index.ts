@@ -67,6 +67,8 @@ export interface TCC {
   fase?: 1 | 2; // TCC 1 ou TCC 2
   curso?: string; // ex: "Engenharia de Software", "Sistemas de Informação"
   versaoFinalUrl?: string;
+  /** Data/hora da defesa (usada pelo painel da banca para ordenar e alertar). */
+  defesaEm?: Date | string;
   aluno_id: string;
   orientador_id: string;
 }
@@ -111,6 +113,28 @@ export interface BancaAvaliacao {
   id: string;
   tcc_id: string;
   avaliador_id: string;
+}
+
+export type StatusAvaliacao = "RASCUNHO" | "FINALIZADA";
+
+export type DecisaoBanca = "APROVADO" | "APROVADO_RESSALVAS" | "REPROVADO";
+
+/**
+ * Resultado da avaliação de UM membro da banca sobre UM TCC.
+ * O id do documento é o mesmo da BancaAvaliacao (banca_id): 1 avaliação por vínculo.
+ * Depois de FINALIZADA é imutável (mesma lógica de RN02 para o histórico).
+ */
+export interface Avaliacao {
+  id: string;
+  banca_id: string;
+  tcc_id: string;
+  avaliador_id: string;
+  status: StatusAvaliacao;
+  decisao?: DecisaoBanca;
+  nota?: number; // 0 a 10
+  parecer: string;
+  atualizadoEm?: Date | string;
+  dataAvaliacao?: Date | string; // preenchida ao finalizar
 }
 
 export interface Notificacao {

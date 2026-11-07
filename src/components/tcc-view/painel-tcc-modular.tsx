@@ -69,12 +69,21 @@ export function mapStatusParaColuna(status: StatusEntrega): ColunaKanbanKey {
 
 export function slugDoMarco(titulo: string, idx: number): string {
   const t = titulo.toLowerCase();
+  if (t.includes("defin") || t.includes("tema")) return "definicao-tema";
+  if (t.includes("plano") || t.includes("termo") || t.includes("compromisso")) return "plano-trabalho";
   if (t.includes("introdu")) return "introducao";
+  if (t.includes("correlat")) return "trabalhos-correlatos";
   if (t.includes("referenc") || t.includes("teor")) return "referencial-teorico";
+  if (t.includes("resumo") || t.includes("abstract")) return "resumo-abstract";
+  if (t.includes("revis") || t.includes("abnt")) return "revisao-abnt";
+  if (t.includes("integrado") || t.includes("capitulo")) return "capitulos-integrados";
+  if (t.includes("proto") || t.includes("teste") || t.includes("usab")) return "prototipacao-testes";
   if (t.includes("metod")) return "metodologia";
   if (t.includes("result")) return "resultados";
   if (t.includes("conclu")) return "conclusao";
-  const fallback = ["introducao", "referencial-teorico", "metodologia", "resultados", "conclusao"];
+  if (t.includes("biblio") || t.includes("catalogo") || t.includes("ficha")) return "entrega-biblioteca";
+  if (t.includes("apresent") || t.includes("defesa") || t.includes("banca")) return "apresentacao-banca";
+  const fallback = ["introducao", "referencial-teorico", "metodologia", "resultados", "revisao-abnt", "conclusao"];
   return fallback[idx % fallback.length];
 }
 
@@ -481,6 +490,25 @@ export function PainelTccModular({
                       const ultimoMaterial = mockEtapa?.materiaisFixados?.[0];
                       const ultimoFeedback = item.feedbacks[0];
 
+                      const progresso =
+                        (item as any).progresso !== undefined
+                          ? (item as any).progresso
+                          : (item.marco as any).progresso !== undefined
+                          ? (item.marco as any).progresso
+                          : item.statusEfetivo === "CONCLUIDA"
+                          ? 100
+                          : item.statusEfetivo === "PRONTA_PARA_REVISAO"
+                          ? 85
+                          : item.statusEfetivo === "EM_REVISAO"
+                          ? 70
+                          : (item.statusEfetivo as any) === "EM_ANDAMENTO"
+                          ? 50
+                          : 0;
+
+                      const dataEntregaTexto =
+                        (item.marco as any).dataEntregaFormatada ??
+                        (item.marco.dataLimite ? formatarData(item.marco.dataLimite) : "28/10/2026");
+
                       return (
                         <Link
                           key={item.marco.id}
@@ -492,7 +520,7 @@ export function PainelTccModular({
                           {/* Cabeçalho do bloco */}
                           <div className="flex items-start justify-between gap-1">
                             <h4 className="text-[12.5px] font-bold text-[#111a2e] group-hover:text-[#1e78f0] transition-colors leading-snug">
-                              {idx + 1}. {item.marco.titulo}
+                              {item.marco.titulo}
                             </h4>
                             {atrasado && (
                               <span className="shrink-0 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
@@ -501,7 +529,10 @@ export function PainelTccModular({
                             )}
                           </div>
 
-                          {/* Prazo Limite */}
+                          {/* Barra de Progresso do Bloco */}
+                          <ProgressBar value={progresso} className="h-1.5" />
+
+                          {/* Métricas do Bloco (Fiel ao protótipo) */}
                           <div className="flex justify-between items-center text-[11px] text-[#6b7385] font-medium">
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3 text-[#6b7385]" />

@@ -11,14 +11,12 @@ interface TccDetalheClientProps {
   voltarHref: string;
   isAluno: boolean;
   isOrientador: boolean;
-  isAvaliador?: boolean;
 }
 
 export function TccDetalheClient({
   painel,
   voltarHref,
   isOrientador,
-  isAvaliador,
 }: TccDetalheClientProps) {
   const { tcc, outrosTccsDoAluno = [] } = painel;
 

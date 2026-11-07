@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { requireSessao } from "@/lib/auth/server-session";
@@ -37,18 +38,8 @@ async function Painel({ params }: { params: Promise<{ id: string }> }) {
     );
   }
 
-  // Se for professor avaliador, ele avalia diretamente o projeto final na banca
-  if (sessao.perfil === PerfilEnum.AVALIADOR) {
-    return (
-      <TccDetalheClient
-        painel={painel}
-        voltarHref={homeDoPerfil(sessao.perfil)}
-        isAluno={false}
-        isOrientador={false}
-        isAvaliador={true}
-      />
-    );
-  }
+  // Avaliador trabalha na sala da banca (leitor do PDF + formulário de avaliação).
+  if (sessao.perfil === PerfilEnum.AVALIADOR) redirect(`/dashboard/tcc/${id}/banca`);
 
   const isOrientadorOuGestor =
     sessao.perfil === PerfilEnum.ORIENTADOR ||

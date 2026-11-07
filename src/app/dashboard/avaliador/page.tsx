@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { requireSessao } from "@/lib/auth/server-session";
-import { listarTccsVisiveis } from "@/lib/data/queries";
+import { listarTccsDaBanca } from "@/lib/data/queries";
 import { PerfilEnum } from "@/types";
 import { AvaliadorDashboardClient } from "./avaliador-dashboard-client";
 
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 async function ConteudoAvaliador() {
   const sessao = await requireSessao(PerfilEnum.AVALIADOR);
-  const tccs = await listarTccsVisiveis(sessao);
+  const tccs = await listarTccsDaBanca(sessao);
 
   return (
     <AvaliadorDashboardClient

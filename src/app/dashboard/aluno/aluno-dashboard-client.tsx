@@ -15,7 +15,6 @@ interface AlunoDashboardClientProps {
 export function AlunoDashboardClient({
   nomeAluno,
   tccs,
-  detalhesPrincipal,
   tccIdAtivo,
 }: AlunoDashboardClientProps) {
   const tccPrincipal = tccs.find((t) => t.id === tccIdAtivo) ?? tccs[0] ?? null;
@@ -58,16 +57,18 @@ export function AlunoDashboardClient({
   // Prioriza as etapas ricas fictícias do frontend
   const itens: ItemMarco[] = itensMock;
 
-  const tccMock: TccResumo = tccPrincipal ?? {
-    id: "tcc-principal",
-    titulo: "Inteligência Artificial Aplicada à Educação",
-    aluno_id: "123456",
-    orientador_id: "prof-1",
+  const tccMock: TccResumo = {
+    id: tccPrincipal?.id ?? "tcc-principal",
+    titulo: tccPrincipal?.titulo && tccPrincipal.titulo !== "Sem título"
+      ? tccPrincipal.titulo
+      : "SGTCC: Sistema Web para Gestão e Orientação de TCC no Ensino Superior",
+    aluno_id: tccPrincipal?.aluno_id ?? "20231BSI0142",
+    orientador_id: tccPrincipal?.orientador_id ?? "prof-joana",
     statusGeral: "EM_ANDAMENTO",
-    alunoNome: nomeAluno,
-    orientadorNome: "Prof.ª Joana Jordão",
-    fase: 1,
-    curso: "Engenharia de Software",
+    alunoNome: nomeAluno || "Jorge",
+    orientadorNome: tccPrincipal?.orientadorNome ?? "Prof.ª Joana Jordão",
+    fase: tccPrincipal?.fase ?? 2,
+    curso: tccPrincipal?.curso ?? "Sistemas de Informação",
   };
 
   return (
@@ -75,9 +76,9 @@ export function AlunoDashboardClient({
       tcc={tccMock}
       itens={itens}
       papel="aluno"
-      saudacaoNome={nomeAluno}
-      subtitulo="Acompanhe o andamento do seu TCC. Selecione a disciplina e clique nas etapas para acessar a sala."
-      outrosTccs={tccs}
+      saudacaoNome={nomeAluno || "Jorge"}
+      subtitulo="Acompanhe o andamento do seu TCC. Clique nas etapas para acessar a sala com postagens, materiais e envios."
+      outrosTccs={tccs.length > 0 ? tccs : [tccMock]}
       onTrocarTccHref={(tccId) => `/dashboard/aluno?tcc=${tccId}`}
     />
   );
