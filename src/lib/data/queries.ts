@@ -3,13 +3,16 @@ import { adminDb } from "@/lib/firebase/admin";
 import { canAccessTcc } from "@/lib/auth/authorization";
 import { getTccAccessRecord } from "@/lib/auth/firestore-repository";
 import type { AuthenticatedSession } from "@/lib/auth/session";
+import { etapaBanca, type EtapaBanca } from "@/lib/banca/status";
 import {
   PerfilEnum,
   type Aluno,
+  type Avaliacao,
   type BancaAvaliacao,
   type Entrega,
   type Feedback,
   type MarcoCronograma,
+  type ProfessorAvaliador,
   type ProfessorOrientador,
   type StatusEntrega,
   type TCC,
@@ -205,4 +208,149 @@ export async function getPainelTcc(sessao: AuthenticatedSession, tccId: string):
   });
 
   return { tcc: resumo, itens, outrosTccsDoAluno };
+}
+
+// ---------- Banca avaliadora ----------
+
+/** Marco cuja última versão é a "versão final" enviada à banca (ver scripts/seed.ts). */
+export const MARCO_ENTREGA_FINAL = "entrega-final";
+
+export interface VersaoFinal {
+  /** id em `versoes_arquivo`: é o que /api/documentos/[documentId] espera. */
+  id: string;
+  numeroVersao: number;
+  dataUpload: string;
+  nomeArquivo: string;
+}
+
+export interface TccBanca extends TccResumo {
+  bancaId: string;
+  versaoFinal: VersaoFinal | null;
+  /** Avaliação do avaliador logado (null = ainda não começou). */
+  avaliacao: Avaliacao | null;
+  etapa: EtapaBanca;
+}
+
+function nomeDoArquivo(caminho: string): string {
+  return decodeURIComponent(caminho.split("/").pop() ?? caminho);
+}
+
+/** Última versão do marco "entrega-final" de cada TCC (um único par de consultas em lote). */
+async function versoesFinais(tccIds: string[]): Promise<Map<string, VersaoFinal>> {
+  const entregas = (await emLotes<Entrega>("entregas", "tcc_id", tccIds)).filter(
+    (e) => e.marco_id === MARCO_ENTREGA_FINAL,
+  );
+  const versoes = await emLotes<VersaoArquivo>("versoes_arquivo", "entrega_id", entregas.map((e) => e.id));
+  const resultado = new Map<string, VersaoFinal>();
+  for (const entrega of entregas) {
+    const ultima = versoes
+      .filter((v) => v.entrega_id === entrega.id)
+      .sort((a, b) => b.numeroVersao - a.numeroVersao)[0];
+    if (ultima) {
+      resultado.set(entrega.tcc_id, {
+        id: ultima.id,
+        numeroVersao: ultima.numeroVersao,
+        dataUpload: String(ultima.dataUpload),
+        nomeArquivo: nomeDoArquivo(ultima.arquivoUrl),
+      });
+    }
+  }
+  return resultado;
+}
+
+/** Defesa mais próxima primeiro; sem data vai para o fim. */
+function porDefesa(a: TCC, b: TCC): number {
+  const ta = a.defesaEm ? tempo(a.defesaEm) : Number.POSITIVE_INFINITY;
+  const tb = b.defesaEm ? tempo(b.defesaEm) : Number.POSITIVE_INFINITY;
+  return ta - tb || a.titulo.localeCompare(b.titulo, "pt-BR");
+}
+
+/** Painel do avaliador: só os TCCs em que ele consta na banca, com a etapa de cada um. */
+export async function listarTccsDaBanca(sessao: AuthenticatedSession): Promise<TccBanca[]> {
+  if (sessao.perfil !== PerfilEnum.AVALIADOR) return [];
+  const prof = await buscarPorUsuario("professores_avaliadores", sessao.usuario.id);
+  if (!prof) return [];
+
+  const bancas = docs<BancaAvaliacao>(
+    await db().collection("bancas_avaliacao").where("avaliador_id", "==", prof.id).get(),
+  );
+  if (!bancas.length) return [];
+
+  const [tccsPorId, avaliacoesPorBanca, finais] = await Promise.all([
+    porIds<TCC>("tccs", bancas.map((b) => b.tcc_id)),
+    porIds<Avaliacao>("avaliacoes", bancas.map((b) => b.id)),
+    versoesFinais(bancas.map((b) => b.tcc_id)),
+  ]);
+
+  const bancaPorTcc = new Map(bancas.map((b) => [b.tcc_id, b]));
+  const resumos = await enriquecer([...tccsPorId.values()]);
+
+  return resumos
+    .map((t): TccBanca => {
+      const banca = bancaPorTcc.get(t.id)!;
+      const avaliacao = avaliacoesPorBanca.get(banca.id) ?? null;
+      const versaoFinal = finais.get(t.id) ?? null;
+      return { ...t, bancaId: banca.id, versaoFinal, avaliacao, etapa: etapaBanca(Boolean(versaoFinal), avaliacao) };
+    })
+    .sort(porDefesa);
+}
+
+export interface ResultadoBanca extends Avaliacao {
+  avaliadorNome: string;
+}
+
+export interface SalaBanca {
+  tcc: TccResumo;
+  versaoFinal: VersaoFinal | null;
+  /** Vínculo do avaliador logado com este TCC (null para aluno/orientador/coordenação). */
+  minhaBancaId: string | null;
+  minhaAvaliacao: Avaliacao | null;
+  /** Avaliações FINALIZADAS, para quem não é avaliador (o avaliador não vê as dos colegas). */
+  resultados: ResultadoBanca[];
+  totalAvaliadores: number;
+}
+
+/** Devolve null se o TCC não existe OU se a sessão não tem vínculo com ele (mesma regra de getPainelTcc). */
+export async function getSalaBanca(sessao: AuthenticatedSession, tccId: string): Promise<SalaBanca | null> {
+  const registro = await getTccAccessRecord(tccId, sessao);
+  if (!registro || !canAccessTcc(sessao, registro.tcc, registro.context)) return null;
+
+  const [resumo] = await enriquecer([serializar<TCC>(registro.tcc)]);
+  const bancas = docs<BancaAvaliacao>(
+    await db().collection("bancas_avaliacao").where("tcc_id", "==", tccId).get(),
+  );
+  const [avaliacoes, finais] = await Promise.all([
+    porIds<Avaliacao>("avaliacoes", bancas.map((b) => b.id)),
+    versoesFinais([tccId]),
+  ]);
+
+  let minhaBancaId: string | null = null;
+  let minhaAvaliacao: Avaliacao | null = null;
+  let resultados: ResultadoBanca[] = [];
+
+  if (sessao.perfil === PerfilEnum.AVALIADOR) {
+    const prof = await buscarPorUsuario("professores_avaliadores", sessao.usuario.id);
+    const minha = bancas.find((b) => b.avaliador_id === prof?.id);
+    minhaBancaId = minha?.id ?? null;
+    minhaAvaliacao = minha ? (avaliacoes.get(minha.id) ?? null) : null;
+  } else {
+    const finalizadas = bancas.filter((b) => avaliacoes.get(b.id)?.status === "FINALIZADA");
+    const profs = await porIds<ProfessorAvaliador>("professores_avaliadores", finalizadas.map((b) => b.avaliador_id));
+    const usuarios = await porIds<Usuario>("usuarios", [...profs.values()].map((p) => p.usuario_id));
+    resultados = finalizadas
+      .map((b) => ({
+        ...avaliacoes.get(b.id)!,
+        avaliadorNome: usuarios.get(profs.get(b.avaliador_id)?.usuario_id ?? "")?.nome ?? "Avaliador(a)",
+      }))
+      .sort((a, b) => a.avaliadorNome.localeCompare(b.avaliadorNome, "pt-BR"));
+  }
+
+  return {
+    tcc: resumo,
+    versaoFinal: finais.get(tccId) ?? null,
+    minhaBancaId,
+    minhaAvaliacao,
+    resultados,
+    totalAvaliadores: bancas.length,
+  };
 }

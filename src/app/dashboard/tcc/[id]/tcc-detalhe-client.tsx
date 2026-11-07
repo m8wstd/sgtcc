@@ -3,7 +3,6 @@
 import React from "react";
 import type { PainelTcc, ItemMarco } from "@/lib/data/queries";
 import { PainelTccModular } from "@/components/tcc-view/painel-tcc-modular";
-import { SalaBancaView } from "@/components/etapa/sala-banca-view";
 import { SALAS_ETAPAS_MOCK } from "@/app/dashboard/aluno/dados-etapas";
 
 interface TccDetalheClientProps {
@@ -11,28 +10,14 @@ interface TccDetalheClientProps {
   voltarHref: string;
   isAluno: boolean;
   isOrientador: boolean;
-  isAvaliador?: boolean;
 }
 
 export function TccDetalheClient({
   painel,
   voltarHref,
   isOrientador,
-  isAvaliador,
 }: TccDetalheClientProps) {
   const { tcc, outrosTccsDoAluno = [] } = painel;
-
-  // Se o usuário logado for membro da BANCA AVALIADORA, ele vê diretamente o projeto final para avaliação
-  if (isAvaliador) {
-    return (
-      <SalaBancaView
-        tcc={tcc}
-        nomeUsuario="Professor(a) Avaliador(a)"
-        papelUsuario="avaliador"
-        voltarHref={voltarHref}
-      />
-    );
-  }
 
   // Gera as etapas fictícias ricas do frontend com dados completos para visualização
   const itensFicticios: ItemMarco[] = SALAS_ETAPAS_MOCK.map((etapa, idx) => {

@@ -109,6 +109,19 @@ service cloud.firestore {
       allow write: if ehStaff();
     }
 
+    // ---------- Avaliacoes da banca ----------
+    // Doc id = id da banca. Gravacao so pelo servidor (POST /api/tcc/[tccId]/avaliacao,
+    // que valida banca, versao final e imutabilidade apos FINALIZADA).
+    // Leitura: o proprio avaliador (inclusive rascunho) e, apos FINALIZADA, aluno e orientador.
+    match /avaliacoes/{id} {
+      allow read: if ehStaff()
+        || (logado() && resource.data.avaliador_id == request.auth.uid)
+        || (resource.data.status == 'FINALIZADA'
+            && (ehOrientadorDoTcc(tccDoc(resource.data.tcc_id))
+                || ehAlunoDoTcc(tccDoc(resource.data.tcc_id))));
+      allow write: if false;
+    }
+
     // ---------- Entregas ----------
     match /entregas/{id} {
       allow read: if participaDoTcc(tccDoc(resource.data.tcc_id));
