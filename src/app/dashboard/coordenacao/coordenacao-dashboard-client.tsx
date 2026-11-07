@@ -51,6 +51,29 @@ export function CoordenacaoDashboardClient({
   const [trocaAlunoId, setTrocaAlunoId] = useState("");
   const [novoOrientadorNome, setNovoOrientadorNome] = useState("");
 
+  const [cronograma, setCronograma] = useState([
+    { etapa: "1. Submissão da Introdução e Objetivos", data: "2026-07-15" },
+    { etapa: "2. Referencial Teórico e Revisão Bibliográfica", data: "2026-08-12" },
+    { etapa: "3. Metodologia e Instrumentos", data: "2026-09-09" },
+    { etapa: "4. Apresentação dos Resultados", data: "2026-10-07" },
+    { etapa: "5. Entrega Final da Monografia à Banca", data: "2026-11-30" },
+  ]);
+
+  const [bancaTcc, setBancaTcc] = useState("");
+  const [bancaData, setBancaData] = useState("");
+  const pendentes = tccs.filter((t) => t.statusGeral === "EM_ANDAMENTO");
+
+  const avisar = (msg: string) => {
+    setAlertaSucesso(msg);
+    setTimeout(() => setAlertaSucesso(null), 5000);
+  };
+
+  const cargaOrientadores = useMemo(() => {
+    const m = new Map<string, number>();
+    tccs.forEach((t) => m.set(t.orientadorNome, (m.get(t.orientadorNome) ?? 0) + 1));
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+  }, [tccs]);
+
   const cursosDisponiveis = useMemo(() => {
     const setC = new Set<string>();
     tccs.forEach((t) => {
