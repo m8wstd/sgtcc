@@ -448,7 +448,7 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
           <StatCard
             label="Total Geral"
             value={contadores.TODOS}
-            variant="blue"
+            variant="primary"
             icon={<Users className="w-4 h-4" />}
             className="p-4"
             onClick={() => {
