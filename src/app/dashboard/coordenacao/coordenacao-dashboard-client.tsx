@@ -51,13 +51,103 @@ export function CoordenacaoDashboardClient({
   const [trocaAlunoId, setTrocaAlunoId] = useState("");
   const [novoOrientadorNome, setNovoOrientadorNome] = useState("");
 
-  const [cronograma, setCronograma] = useState([
-    { etapa: "1. Submissão da Introdução e Objetivos", data: "2026-07-15" },
-    { etapa: "2. Referencial Teórico e Revisão Bibliográfica", data: "2026-08-12" },
-    { etapa: "3. Metodologia e Instrumentos", data: "2026-09-09" },
-    { etapa: "4. Apresentação dos Resultados", data: "2026-10-07" },
-    { etapa: "5. Entrega Final da Monografia à Banca", data: "2026-11-30" },
-  ]);
+  const [cronograma, setCronograma] = useState<Array<{
+    id: string;
+    titulo: string;
+    dataLimite: string;
+    fase: 1 | 2;
+    tipo: "COMUM" | "ENTREGA_FINAL" | "DEFESA";
+    ordem: number;
+    exigeArquivo?: boolean;
+    descricao?: string;
+  }>>([]);
+  const [faseCronograma, setFaseCronograma] = useState<1 | 2>(1);
+  const [salvandoCronograma, setSalvandoCronograma] = useState(false);
+  const [editandoCronograma, setEditandoCronograma] = useState(false);
+  const [excluirIds, setExcluirIds] = useState<string[]>([]);
+  const [novoTitulo, setNovoTitulo] = useState("");
+  const [novoPrazo, setNovoPrazo] = useState("");
+
+  // Carregar cronograma real da API
+  React.useEffect(() => {
+    fetch("/api/coordenacao/cronograma")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.marcos && Array.isArray(data.marcos) && data.marcos.length > 0) {
+          setCronograma(
+            data.marcos.map((m: any) => ({
+              id: m.id,
+              titulo: m.titulo,
+              dataLimite: typeof m.dataLimite === "string" ? m.dataLimite.split("T")[0] : m.dataLimite,
+              fase: m.fase === 2 ? 2 : 1,
+              tipo: m.tipo ?? (m.id === "entrega-final" ? "ENTREGA_FINAL" : m.id === "defesa" ? "DEFESA" : "COMUM"),
+              ordem: m.ordem ?? 1,
+              exigeArquivo: m.exigeArquivo,
+              descricao: m.descricao,
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleAdicionarEtapa = () => {
+    if (!novoTitulo.trim()) return;
+    const slug = novoTitulo
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)+/g, "");
+    const id = `tcc${faseCronograma}-${slug}-${Date.now().toString().slice(-4)}`;
+
+    const maxOrdemComum = Math.max(
+      0,
+      ...cronograma.filter((m) => m.tipo === "COMUM" && m.fase === faseCronograma).map((m) => m.ordem)
+    );
+
+    setCronograma((prev) => [
+      ...prev,
+      {
+        id,
+        titulo: novoTitulo.trim(),
+        dataLimite: novoPrazo || new Date().toISOString().split("T")[0],
+        fase: faseCronograma,
+        tipo: "COMUM",
+        ordem: maxOrdemComum + 1,
+        exigeArquivo: true,
+      },
+    ]);
+    setNovoTitulo("");
+    setNovoPrazo("");
+  };
+
+  const handleRemoverEtapa = (id: string) => {
+    setCronograma((prev) => prev.filter((m) => m.id !== id));
+    setExcluirIds((prev) => [...prev, id]);
+  };
+
+  const handleSalvarCronograma = async () => {
+    setSalvandoCronograma(true);
+    try {
+      const res = await fetch("/api/coordenacao/cronograma", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marcos: cronograma, excluirIds }),
+      });
+      if (res.ok) {
+        _avisar("Cronograma e etapas atualizados com sucesso!");
+        setEditandoCronograma(false);
+        setExcluirIds([]);
+      } else {
+        alert("Erro ao salvar cronograma.");
+      }
+    } catch {
+      alert("Falha na comunicação com o servidor.");
+    } finally {
+      setSalvandoCronograma(false);
+    }
+  };
 
 
   /**
@@ -422,50 +512,242 @@ export function CoordenacaoDashboardClient({
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-[#111a2e]">
-                    Cronograma Institucional do Semestre (2026/2)
+                    Cronograma Institucional do Semestre
                   </h3>
                   <p className="text-xs text-[#6b7385]">
-                    Datas limites oficiais para submissões de etapas e bancas avaliadoras.
+                    Datas limites oficiais para submissões de etapas e bancas avaliadoras do curso.
                   </p>
                 </div>
               </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditandoCronograma(!editandoCronograma)}
+                  className="px-3.5 py-1.5 bg-white border border-[#dfe2e8] hover:bg-[#f4f5f7] text-[#111a2e] text-xs font-semibold rounded-lg cursor-pointer"
+                >
+                  {editandoCronograma ? "Visualizar" : "Editar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPainelAcaoAtivo(null)}
+                  className="p-1 rounded-md text-[#6b7385] hover:bg-[#e5e7eb] cursor-pointer"
+                  title="Recolher painel"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Abas TCC 1 vs TCC 2 */}
+            <div className="flex items-center gap-2 border-b border-[#dfe2e8] pb-2">
               <button
                 type="button"
-                onClick={() => setPainelAcaoAtivo(null)}
-                className="p-1 rounded-md text-[#6b7385] hover:bg-[#e5e7eb] cursor-pointer"
-                title="Recolher painel"
+                onClick={() => setFaseCronograma(1)}
+                className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  faseCronograma === 1
+                    ? "bg-[#0f1b33] text-white shadow-xs"
+                    : "bg-white text-[#6b7385] hover:text-[#111a2e] border border-[#dfe2e8]"
+                }`}
               >
-                <X className="w-4 h-4" />
+                TCC 1
+              </button>
+              <button
+                type="button"
+                onClick={() => setFaseCronograma(2)}
+                className={`px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                  faseCronograma === 2
+                    ? "bg-[#0f1b33] text-white shadow-xs"
+                    : "bg-white text-[#6b7385] hover:text-[#111a2e] border border-[#dfe2e8]"
+                }`}
+              >
+                TCC 2
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-xs">
-              <div className="p-2.5 bg-white rounded-lg border border-[#dfe2e8] space-y-1">
-                <span className="text-[10px] font-bold text-[#1e78f0] uppercase">Etapa 1</span>
-                <p className="font-semibold text-[#111a2e]">Introdução e Objetivos</p>
-                <span className="text-[11px] text-[#6b7385] block">Prazo: 15/07/2026</span>
+            {/* Etapas */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#111a2e]">
+                  Etapas — TCC {faseCronograma}
+                </span>
+                {editandoCronograma && (
+                  <span className="text-[11px] text-[#6b7385]">
+                    Adicione novas etapas ou altere os prazos e títulos
+                  </span>
+                )}
               </div>
-              <div className="p-2.5 bg-white rounded-lg border border-[#dfe2e8] space-y-1">
-                <span className="text-[10px] font-bold text-[#1e78f0] uppercase">Etapa 2</span>
-                <p className="font-semibold text-[#111a2e]">Referencial Teórico</p>
-                <span className="text-[11px] text-[#6b7385] block">Prazo: 12/08/2026</span>
-              </div>
-              <div className="p-2.5 bg-white rounded-lg border border-[#dfe2e8] space-y-1">
-                <span className="text-[10px] font-bold text-[#1e78f0] uppercase">Etapa 3</span>
-                <p className="font-semibold text-[#111a2e]">Metodologia e Coleta</p>
-                <span className="text-[11px] text-[#6b7385] block">Prazo: 09/09/2026</span>
-              </div>
-              <div className="p-2.5 bg-white rounded-lg border border-[#dfe2e8] space-y-1">
-                <span className="text-[10px] font-bold text-[#1e78f0] uppercase">Etapa 4</span>
-                <p className="font-semibold text-[#111a2e]">Resultados Preliminares</p>
-                <span className="text-[11px] text-[#6b7385] block">Prazo: 07/10/2026</span>
-              </div>
-              <div className="p-2.5 bg-white rounded-lg border border-amber-200 bg-amber-50/40 space-y-1">
-                <span className="text-[10px] font-bold text-amber-800 uppercase">Final</span>
-                <p className="font-semibold text-[#111a2e]">Monografia à Banca</p>
-                <span className="text-[11px] text-amber-900 font-bold block">Prazo: 30/11/2026</span>
+
+              {editandoCronograma && (
+                <div className="p-3 bg-white rounded-lg border border-[#1e78f0]/30 bg-blue-50/20 flex flex-col sm:flex-row items-center gap-2">
+                  <input
+                    type="text"
+                    value={novoTitulo}
+                    onChange={(e) => setNovoTitulo(e.target.value)}
+                    placeholder={`Título da nova etapa de TCC ${faseCronograma}...`}
+                    className="flex-1 w-full px-3 py-1.5 text-xs border border-[#dfe2e8] rounded-lg bg-white text-[#111a2e] focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
+                  />
+                  <input
+                    type="date"
+                    value={novoPrazo}
+                    onChange={(e) => setNovoPrazo(e.target.value)}
+                    className="w-full sm:w-auto px-3 py-1.5 text-xs border border-[#dfe2e8] rounded-lg bg-white text-[#111a2e] focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAdicionarEtapa}
+                    className="w-full sm:w-auto px-3.5 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-semibold rounded-lg cursor-pointer whitespace-nowrap"
+                  >
+                    Criar Etapa
+                  </button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
+                {cronograma
+                  .filter((m) => m.tipo === "COMUM" && m.fase === faseCronograma)
+                  .map((m, idx) => (
+                    <div key={m.id} className="p-3 bg-white rounded-lg border border-[#dfe2e8] space-y-1.5 relative group">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-[#1e78f0] uppercase">
+                          Etapa {idx + 1}
+                        </span>
+                        {editandoCronograma && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoverEtapa(m.id)}
+                            className="text-[#ff7f7f] hover:text-red-700 p-0.5 rounded cursor-pointer"
+                            title="Remover etapa"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      {editandoCronograma ? (
+                        <div className="space-y-1">
+                          <input
+                            type="text"
+                            value={m.titulo}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setCronograma((prev) =>
+                                prev.map((item) => (item.id === m.id ? { ...item, titulo: v } : item))
+                              );
+                            }}
+                            className="w-full px-2 py-1 text-xs border border-[#dfe2e8] rounded bg-white text-[#111a2e]"
+                          />
+                          <input
+                            type="date"
+                            value={m.dataLimite}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setCronograma((prev) =>
+                                prev.map((item) => (item.id === m.id ? { ...item, dataLimite: v } : item))
+                              );
+                            }}
+                            className="w-full px-2 py-1 text-xs border border-[#dfe2e8] rounded bg-white text-[#111a2e]"
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <p className="font-semibold text-[#111a2e] leading-snug">{m.titulo}</p>
+                          <span className="text-[11px] text-[#6b7385] block">
+                            Prazo: {m.dataLimite ? m.dataLimite.split("-").reverse().join("/") : "A definir"}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  ))}
               </div>
             </div>
+
+            {/* Banca Avaliadora e Defesa (relevante principalmente para o Trabalho Final TCC 2) */}
+            <div className="space-y-2 pt-2 border-t border-[#dfe2e8]/60">
+              <span className="text-xs font-bold uppercase tracking-wider text-[#111a2e]">
+                Banca Avaliadora e Defesa
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                {cronograma
+                  .filter((m) => (m.tipo === "ENTREGA_FINAL" || m.tipo === "DEFESA") && m.fase === faseCronograma)
+                  .map((m) => {
+                    const isFinal = m.tipo === "ENTREGA_FINAL";
+                    return (
+                      <div
+                        key={m.id}
+                        className={`p-3 bg-white rounded-lg border space-y-1.5 ${
+                          isFinal ? "border-amber-200 bg-amber-50/20" : "border-emerald-200 bg-emerald-50/20"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`text-[10px] font-bold uppercase ${
+                              isFinal ? "text-amber-800" : "text-emerald-800"
+                            }`}
+                          >
+                            {isFinal ? "Envio à Banca" : "Defesa Pública"}
+                          </span>
+                        </div>
+                        {editandoCronograma ? (
+                          <div className="space-y-1">
+                            <input
+                              type="text"
+                              value={m.titulo}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setCronograma((prev) =>
+                                  prev.map((item) => (item.id === m.id ? { ...item, titulo: v } : item))
+                                );
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-[#dfe2e8] rounded bg-white text-[#111a2e]"
+                            />
+                            <input
+                              type="date"
+                              value={m.dataLimite}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setCronograma((prev) =>
+                                  prev.map((item) => (item.id === m.id ? { ...item, dataLimite: v } : item))
+                                );
+                              }}
+                              className="w-full px-2 py-1 text-xs border border-[#dfe2e8] rounded bg-white text-[#111a2e]"
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <p className="font-semibold text-[#111a2e] leading-snug">{m.titulo}</p>
+                            <span
+                              className={`text-[11px] font-bold block ${
+                                isFinal ? "text-amber-900" : "text-emerald-900"
+                              }`}
+                            >
+                              Prazo: {m.dataLimite ? m.dataLimite.split("-").reverse().join("/") : "A definir"}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {editandoCronograma && (
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#dfe2e8]">
+                <button
+                  type="button"
+                  onClick={() => setEditandoCronograma(false)}
+                  className="px-3.5 py-1.5 rounded-lg border border-[#dfe2e8] bg-white text-xs font-semibold text-[#6b7385] hover:bg-[#f4f5f7] cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={salvandoCronograma}
+                  onClick={handleSalvarCronograma}
+                  className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
+                >
+                  {salvandoCronograma ? "Salvando..." : "Salvar Alterações no Banco"}
+                </button>
+              </div>
+            )}
           </div>
         )}
 

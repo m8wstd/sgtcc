@@ -16,6 +16,8 @@ import {
   List,
   CheckCircle2,
   Clock,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 interface OrientadorDashboardClientProps {
@@ -72,6 +74,8 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
   const [statusAtivo, setStatusAtivo] = useState<"todos" | "Pendente" | "Em revisão" | "Concluído">("todos");
   const [viewMode, setViewMode] = useState<"kanban" | "lista">("kanban");
   const [busca, setBusca] = useState("");
+  const [exibirPendente, setExibirPendente] = useState(true);
+  const [exibirConcluido, setExibirConcluido] = useState(false);
 
   const cursosDisponiveis = useMemo(() => {
     const setC = new Set<string>();
@@ -228,6 +232,34 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
           </div>
 
           {/* Alternador de Visão */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setExibirPendente((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                exibirPendente
+                  ? "bg-[#d5d9e0] text-[#111a2e] border-[#c0c5cd]"
+                  : "bg-white text-[#6b7385] border-[#dfe2e8] hover:text-[#111a2e]"
+              }`}
+            >
+              {exibirPendente ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              <span>Pendentes ({stats.pendente})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setExibirConcluido((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                exibirConcluido
+                  ? "bg-[#86d994] text-[#111a2e] border-[#6bc77b]"
+                  : "bg-white text-[#6b7385] border-[#dfe2e8] hover:text-[#111a2e]"
+              }`}
+            >
+              {exibirConcluido ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              <span>Concluídos ({stats.concluidos})</span>
+            </button>
+          </div>
+
           <div className="flex items-center gap-1 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
             <button
               type="button"
@@ -260,11 +292,25 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
       {/* KANBAN DO ORIENTADOR (3 COLUNAS: Pendente, Em revisão, Concluído) */}
       {viewMode === "kanban" ? (
         <div className="w-full overflow-x-auto pb-4">
-          <div className="grid grid-cols-3 gap-4 min-w-[760px]">
-            {COLUNAS_ORIENTADOR.map((col) => {
-              const alunosNaColuna = tccsFiltrados.filter(
-                (t) => mapAlunoParaColunaOrientador(t) === col.key
-              );
+          <div
+            className={`grid gap-4 min-w-[760px] ${
+              exibirPendente && exibirConcluido
+                ? "grid-cols-3"
+                : exibirPendente || exibirConcluido
+                ? "grid-cols-2"
+                : "grid-cols-1"
+            }`}
+          >
+            {COLUNAS_ORIENTADOR
+              .filter((col) => {
+                if (col.key === "Pendente" && !exibirPendente) return false;
+                if (col.key === "Concluído" && !exibirConcluido) return false;
+                return true;
+              })
+              .map((col) => {
+                const alunosNaColuna = tccsFiltrados.filter(
+                  (t) => mapAlunoParaColunaOrientador(t) === col.key
+                );
 
               return (
                 <div
@@ -340,8 +386,15 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
             </div>
           ) : (
             <div className="divide-y divide-[#dfe2e8]">
-              {tccsFiltrados.map((t) => {
-                const statusColuna = mapAlunoParaColunaOrientador(t);
+              {tccsFiltrados
+                .filter((t) => {
+                  const statusColuna = mapAlunoParaColunaOrientador(t);
+                  if (statusColuna === "Pendente" && !exibirPendente) return false;
+                  if (statusColuna === "Concluído" && !exibirConcluido) return false;
+                  return true;
+                })
+                .map((t) => {
+                  const statusColuna = mapAlunoParaColunaOrientador(t);
 
                 return (
                   <Link

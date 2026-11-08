@@ -12,8 +12,14 @@ import { TccDetalheClient } from "./tcc-detalhe-client";
 export const metadata = { title: "Detalhes do TCC — SGTCC" };
 export const dynamic = "force-dynamic";
 
-async function Painel({ params }: { params: Promise<{ id: string }> }) {
+interface TccPageProps {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ fase?: string }>;
+}
+
+async function Painel({ params, searchParams }: TccPageProps) {
   const { id } = await params;
+  const sParams = await searchParams;
   const sessao = await requireSessao();
 
   // Avaliador trabalha na sala da banca (leitor do PDF + formulário de avaliação).
@@ -44,6 +50,15 @@ async function Painel({ params }: { params: Promise<{ id: string }> }) {
     );
   }
 
+  // Se o usuário clicou num TCC 1 mas o aluno já está cursando o TCC 2,
+  // e não houve escolha explícita via navegação direta (?fase=...),
+  // redireciona automaticamente para o TCC 2 ativo.
+  const outros = painel.outrosTccsDoAluno ?? [];
+  const tcc2 = outros.find((t) => t.fase === 2);
+  if (painel.tcc.fase === 1 && tcc2 && tcc2.id !== id && sParams?.fase !== "1") {
+    redirect(`/dashboard/tcc/${tcc2.id}`);
+  }
+
   const isOrientadorOuGestor =
     sessao.perfil === PerfilEnum.ORIENTADOR ||
     sessao.perfil === PerfilEnum.COORDENACAO ||
@@ -59,10 +74,10 @@ async function Painel({ params }: { params: Promise<{ id: string }> }) {
   );
 }
 
-export default function TccPage({ params }: { params: Promise<{ id: string }> }) {
+export default function TccPage({ params, searchParams }: TccPageProps) {
   return (
     <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-[#f4f5f7]" />}>
-      <Painel params={params} />
+      <Painel params={params} searchParams={searchParams} />
     </Suspense>
   );
 }

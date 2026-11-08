@@ -77,6 +77,21 @@ export interface TccResumo extends TCC {
   orientadorNome: string;
 }
 
+/**
+ * Retorna o TCC ativo padrão para visualização:
+ * Se o aluno/trabalho possui um TCC 2 cadastrado (em andamento ou com entregas),
+ * ele é o foco principal; caso contrário, foca no TCC 1.
+ */
+export function resolverTccAtivoPadrao<T extends { fase?: 1 | 2; statusGeral?: string }>(lista: T[]): T | null {
+  if (!lista.length) return null;
+  // Se houver TCC 2, prioriza ele
+  const tcc2 = lista.find((t) => t.fase === 2);
+  if (tcc2) return tcc2;
+  // Caso contrário, usa o TCC 1
+  const tcc1 = lista.find((t) => t.fase === 1);
+  return tcc1 ?? lista[0] ?? null;
+}
+
 export async function listarTccsVisiveis(sessao: AuthenticatedSession): Promise<TccResumo[]> {
   const tccs = db().collection("tccs");
   const usuarioId = sessao.usuario.id;
@@ -175,7 +190,16 @@ export async function getPainelTcc(sessao: AuthenticatedSession, tccId: string):
     db().collection("marcos_cronograma").get(),
     db().collection("entregas").where("tcc_id", "==", tccId).get().then((s) => docs<Entrega>(s)),
   ]);
-  const marcos = docs<MarcoCronograma>(marcosSnap).sort((a, b) => tempo(a.dataLimite) - tempo(b.dataLimite));
+  const todosMarcos = docs<MarcoCronograma>(marcosSnap).sort((a, b) => {
+    if (a.ordem !== undefined && b.ordem !== undefined) {
+      return a.ordem - b.ordem;
+    }
+    return tempo(a.dataLimite) - tempo(b.dataLimite);
+  });
+
+  // Filtra marcos pela fase do TCC se o marco tiver 'fase' definida
+  const faseTcc = registro.tcc.fase ?? 1;
+  const marcos = todosMarcos.filter((m) => !m.fase || m.fase === faseTcc);
   const entregaIds = entregas.map((e) => e.id);
 
   const [versoes, feedbacks] = await Promise.all([
@@ -208,6 +232,28 @@ export async function getPainelTcc(sessao: AuthenticatedSession, tccId: string):
   });
 
   return { tcc: resumo, itens, outrosTccsDoAluno };
+}
+
+export async function getEtapaDoTcc(sessao: AuthenticatedSession, tccId: string, slugOuId: string): Promise<{
+  painel: PainelTcc;
+  item: ItemMarco;
+} | null> {
+  const painel = await getPainelTcc(sessao, tccId);
+  if (!painel) return null;
+
+  const item = painel.itens.find((i) => {
+    if (i.marco.id === slugOuId) return true;
+    const slug = i.marco.titulo
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)+/g, "");
+    return slug === slugOuId;
+  });
+
+  if (!item) return null;
+  return { painel, item };
 }
 
 // ---------- Banca avaliadora ----------

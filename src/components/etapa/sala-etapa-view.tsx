@@ -831,7 +831,7 @@ export function SalaEtapaView({
           <div>
             <h2 className="text-base font-bold text-[#111a2e]">
               {isOrientador
-                ? `Versões e Entregas do Aluno &bull; ${tituloEtapa}`
+                ? `Versões e Entregas do Aluno • ${tituloEtapa}`
                 : "Histórico de Versões do Estudante"}
             </h2>
             <p className="text-xs text-[#6b7385] mt-0.5">

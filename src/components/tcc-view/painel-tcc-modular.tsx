@@ -21,7 +21,6 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { SALAS_ETAPAS_MOCK } from "@/app/dashboard/aluno/dados-etapas";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusPill } from "@/components/ui/status-pill";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -43,45 +42,13 @@ export const COLUNAS_KANBAN = [
   { key: "Concluído", label: "Concluído", cor: "#86d994" },
 ] as const;
 
-export type ColunaKanbanKey = (typeof COLUNAS_KANBAN)[number]["key"];
+import {
+  mapStatusParaColuna,
+  slugDoMarco,
+  type ColunaKanbanKey,
+} from "@/app/dashboard/aluno/dados-etapas";
 
-/**
- * Regra de Negócio solicitada:
- * - Pendente: etapas que ainda não foram começadas (AGUARDANDO_ENVIO ou ATRASADA sem versões)
- * - Em andamento: etapas que estão sendo feitas pelo aluno
- * - Para correção: quando o aluno envia o arquivo (PRONTA_PARA_REVISAO)
- * - Em correção: quando o orientador marca que está corrigindo ou solicita correções (EM_REVISAO ou SOLICITADA_CORRECAO)
- * - Concluído: etapas marcadas como concluídas (CONCLUIDA)
- */
-export function mapStatusParaColuna(status: StatusEntrega): ColunaKanbanKey {
-  switch (status) {
-    case "AGUARDANDO_ENVIO":
-    case "ATRASADA":
-      return "Pendente";
-    case "EM_ANDAMENTO" as any:
-      return "Em andamento";
-    case "PRONTA_PARA_REVISAO":
-      return "Para correção";
-    case "EM_REVISAO":
-    case "SOLICITADA_CORRECAO":
-      return "Em correção";
-    case "CONCLUIDA":
-      return "Concluído";
-    default:
-      return "Pendente";
-  }
-}
-
-export function slugDoMarco(titulo: string, idx: number): string {
-  const t = titulo.toLowerCase();
-  if (t.includes("introdu")) return "introducao";
-  if (t.includes("referenc") || t.includes("teor")) return "referencial-teorico";
-  if (t.includes("metod")) return "metodologia";
-  if (t.includes("result")) return "resultados";
-  if (t.includes("conclu")) return "conclusao";
-  const fallback = ["introducao", "referencial-teorico", "metodologia", "resultados", "conclusao"];
-  return fallback[idx % fallback.length];
-}
+export { mapStatusParaColuna, slugDoMarco, type ColunaKanbanKey };
 
 export interface PainelTccModularProps {
   tcc: TccResumo;
@@ -111,8 +78,11 @@ export function PainelTccModular({
   const [exibirPendente, setExibirPendente] = useState(true);
   const [exibirConcluido, setExibirConcluido] = useState(false);
 
-  // Estado dinâmico de etapas
+  // Estado dinâmico de etapas sincronizado com a prop do servidor
   const [itens, setItens] = useState<ItemMarco[]>(itensIniciais);
+  React.useEffect(() => {
+    setItens(itensIniciais);
+  }, [itensIniciais, tcc.id]);
   const [mostrarCriarEtapa, setMostrarCriarEtapa] = useState(false);
   const [novoTituloEtapa, setNovoTituloEtapa] = useState("");
   const [novaDataLimite, setNovaDataLimite] = useState("30/11/2026");
@@ -376,32 +346,14 @@ export function PainelTccModular({
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              {/* Botão de Envio para a Banca Examinadora - Dourado e habilitado somente com 100% */}
-              {isOrientador ? (
-                <Link
-                  href={`/dashboard/tcc/${tcc.id}/banca`}
-                  className="px-4 py-2 bg-[#d97706] hover:bg-[#b45309] text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-colors shadow-xs"
-                >
-                  <Award className="w-4 h-4 text-amber-200" />
-                  <span>Ver Envio à Banca</span>
-                </Link>
-              ) : porcentagemGeral >= 100 ? (
-                <Link
-                  href={`/dashboard/tcc/${tcc.id}/banca`}
-                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-all shadow-xs"
-                >
-                  <Award className="w-4 h-4 text-yellow-200" />
-                  <span>Enviar para a Banca Avaliadora</span>
-                </Link>
-              ) : (
-                <div
-                  title="O envio para a banca examinadora fica disponível quando o TCC atinge 100% de conclusão."
-                  className="px-4 py-2 bg-[#e5e7eb]/70 text-[#9ca3af] border border-[#d1d5db] text-xs font-semibold rounded-lg flex items-center justify-center gap-2 cursor-not-allowed select-none opacity-60"
-                >
-                  <Award className="w-4 h-4 text-[#9ca3af]" />
-                  <span>Enviar para a Banca Avaliadora</span>
-                </div>
-              )}
+              {/* Botão de Ver Envio à Banca para Aluno e Orientador */}
+              <Link
+                href={`/dashboard/tcc/${tcc.id}/banca`}
+                className="px-4 py-2 bg-[#d97706] hover:bg-[#b45309] text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-colors shadow-xs"
+              >
+                <Award className="w-4 h-4 text-amber-200" />
+                <span>Ver Envio à Banca</span>
+              </Link>
             </div>
           </div>
         </div>
@@ -533,14 +485,13 @@ export function PainelTccModular({
                       const slug = slugDoMarco(item.marco.titulo, idx);
                       const etapaHref = isOrientador
                         ? `/dashboard/tcc/${tcc.id}/etapa/${slug}`
-                        : `/dashboard/aluno/etapa/${slug}`;
+                        : `/dashboard/aluno/etapa/${slug}?tcc=${tcc.id}`;
                       const atrasado = item.statusEfetivo === "ATRASADA";
 
-                      // Busca a última postagem ou material do professor na sala correspondente
-                      const mockEtapa = SALAS_ETAPAS_MOCK.find((s) => s.slug === slug);
-                      const ultimaPostagem = mockEtapa?.postagensProfessor?.[mockEtapa.postagensProfessor.length - 1];
-                      const ultimoMaterial = mockEtapa?.materiaisFixados?.[0];
+                      // Última postagem / feedback real ou descrição da etapa do cronograma
+                      const ultimaPostagem = item.marco.postagens?.[item.marco.postagens.length - 1];
                       const ultimoFeedback = item.feedbacks[0];
+                      const descricaoEtapa = item.marco.descricao;
 
                       return (
                         <Link
@@ -573,27 +524,12 @@ export function PainelTccModular({
                             </span>
                           </div>
 
-                          {/* Última Postagem / Comunicado do Professor */}
-                          <div className="p-2.5 bg-[#f8f9fa] border-l-2 border-[#1e78f0] rounded-[6px] text-[11.5px] text-[#111a2e] space-y-1">
-                            <div className="flex items-center justify-between text-[10px]">
-                              <b className="text-[#1e78f0] uppercase tracking-wider flex items-center gap-1">
-                                <MessageSquare className="w-3 h-3" />
-                                {ultimaPostagem ? "Última postagem do orientador" : "Orientação da sala"}
-                              </b>
-                              {ultimaPostagem && (
-                                <span className="text-[#9ca3af]">{ultimaPostagem.dataHora.split(" às ")[0]}</span>
-                              )}
-                            </div>
-                            <p className="line-clamp-2 leading-relaxed text-[#374151]">
-                              {ultimaPostagem
-                                ? `${ultimaPostagem.titulo} — ${ultimaPostagem.conteudo}`
-                                : ultimoFeedback
-                                ? ultimoFeedback.comentario
-                                : ultimoMaterial
-                                ? `Material disponibilizado: ${ultimoMaterial.nome}`
-                                : "Nenhuma publicação recente. Clique para abrir a sala da etapa."}
+                          {/* Descrição objetiva da etapa cadastrada no cronograma */}
+                          {descricaoEtapa && (
+                            <p className="text-[11.5px] text-[#6b7385] line-clamp-2 leading-relaxed">
+                              {descricaoEtapa}
                             </p>
-                          </div>
+                          )}
 
                           {/* Indicador sutil de que todo o card é clicável */}
                           <div className="pt-1 flex items-center justify-end text-[10px] font-semibold text-[#6b7385] group-hover:text-[#1e78f0] transition-colors gap-1">
@@ -619,17 +555,18 @@ export function PainelTccModular({
               if (colKey === "Concluído" && !exibirConcluido) return false;
               return true;
             })
-            .map(({ marco, statusEfetivo }, idx) => {
+            .map((item, idx) => {
+            const { marco, statusEfetivo } = item;
             const statusLabel = ROTULO_STATUS_ENTREGA[statusEfetivo] ?? statusEfetivo;
             const slug = slugDoMarco(marco.titulo, idx);
             const etapaHref = isOrientador
               ? `/dashboard/tcc/${tcc.id}/etapa/${slug}`
-              : `/dashboard/aluno/etapa/${slug}`;
+              : `/dashboard/aluno/etapa/${slug}?tcc=${tcc.id}`;
             const atrasado = statusEfetivo === "ATRASADA";
 
-            const mockEtapa = SALAS_ETAPAS_MOCK.find((s) => s.slug === slug);
-            const ultimaPostagem = mockEtapa?.postagensProfessor?.[mockEtapa.postagensProfessor.length - 1];
-            const ultimoMaterial = mockEtapa?.materiaisFixados?.[0];
+            const ultimaPostagem = marco.postagens?.[marco.postagens.length - 1];
+            const ultimoFeedback = item.feedbacks?.[0];
+            const descricaoEtapa = marco.descricao;
 
             return (
               <Link
@@ -666,18 +603,12 @@ export function PainelTccModular({
                   </div>
                 </div>
 
-                {/* Última publicação ou orientação do professor */}
-                <div className="mt-3 pt-3 border-t border-[#f0f2f5] flex items-start gap-2 text-xs text-[#6b7385]">
-                  <MessageSquare className="w-3.5 h-3.5 text-[#1e78f0] shrink-0 mt-0.5" />
-                  <p className="line-clamp-1 text-[#374151]">
-                    <b className="text-[#1e78f0] font-semibold mr-1">Última postagem:</b>
-                    {ultimaPostagem
-                      ? `${ultimaPostagem.titulo} — ${ultimaPostagem.conteudo}`
-                      : ultimoMaterial
-                      ? `Material de apoio: ${ultimoMaterial.nome}`
-                      : "Clique para entrar e conferir as orientações e arquivos desta etapa."}
+                {/* Descrição objetiva da etapa cadastrada no cronograma */}
+                {descricaoEtapa && (
+                  <p className="mt-3 pt-3 border-t border-[#f0f2f5] text-xs text-[#6b7385] line-clamp-1">
+                    {descricaoEtapa}
                   </p>
-                </div>
+                )}
               </Link>
             );
           })}
