@@ -96,6 +96,76 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
   // Senha na Edição (opcional)
   const [edicaoSenha, setEdicaoSenha] = useState("");
 
+  // Estado do Link de Conclusão de Cadastro no Modal de Edição
+  const [linkConclusaoEdicao, setLinkConclusaoEdicao] = useState<{
+    url: string;
+    expiraEm?: string;
+  } | null>(null);
+  const [carregandoLinkEdicao, setCarregandoLinkEdicao] = useState(false);
+  const [copiadoLinkEdicao, setCopiadoLinkEdicao] = useState(false);
+
+  // Busca o link ativo do usuário ao abrir o modal de edição
+  async function buscarLinkConclusaoUsuario(email: string) {
+    setCarregandoLinkEdicao(true);
+    setLinkConclusaoEdicao(null);
+    try {
+      const res = await fetch(`/api/admin/convites?email=${encodeURIComponent(email)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.convite && data.convite.id) {
+          setLinkConclusaoEdicao({
+            url: `${window.location.origin}/cadastro?token=${data.convite.id}`,
+            expiraEm: data.convite.expiraEm,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Erro ao buscar link de conclusão do usuário:", err);
+    } finally {
+      setCarregandoLinkEdicao(false);
+    }
+  }
+
+  // Gera um novo link de cadastro sob demanda para o usuário em edição
+  async function handleGerarNovoLinkConclusao() {
+    if (!usuarioEmEdicao) return;
+    setCarregandoLinkEdicao(true);
+    try {
+      const res = await fetch("/api/admin/convites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: usuarioEmEdicao.nome,
+          email: usuarioEmEdicao.email,
+          perfil: usuarioEmEdicao.perfil,
+          matricula: usuarioEmEdicao.matricula,
+          curso: usuarioEmEdicao.curso,
+          cursosCoordenados: usuarioEmEdicao.cursosCoordenados,
+          enviarEmail: false,
+          gerarLinkConclusao: true,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "Erro ao gerar novo link.");
+      }
+
+      const url = `${window.location.origin}/cadastro?token=${data.token}`;
+      setLinkConclusaoEdicao({
+        url,
+        expiraEm: data.convite?.expiraEm,
+      });
+      setMensagemSucesso("Novo link de cadastro gerado com sucesso!");
+      setTimeout(() => setMensagemSucesso(null), 4000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro ao gerar link de cadastro.";
+      setMensagemErro(msg);
+    } finally {
+      setCarregandoLinkEdicao(false);
+    }
+  }
+
   // Feedback e Loading
   const [salvando, setSalvando] = useState(false);
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
@@ -498,6 +568,7 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
                       onClick={() => {
                         setMensagemErro(null);
                         setUsuarioEmEdicao({ ...u });
+                        buscarLinkConclusaoUsuario(u.email);
                       }}
                       className="group block p-4 transition-colors hover:bg-blue-50/30 cursor-pointer sm:px-6 md:grid md:grid-cols-[1.5fr_1.8fr_120px_1.4fr_90px] md:items-center md:gap-4"
                       title="Clique para editar dados deste usuário"
@@ -1006,6 +1077,60 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
                   </div>
                 </div>
               )}
+
+              {/* Seção: Link de Cadastro */}
+              <div className="p-3.5 bg-blue-50/60 rounded-xl border border-blue-200/80 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <LinkIcon className="w-4 h-4 text-[#1e78f0]" />
+                    <span className="font-bold text-[#111a2e]">Link de Cadastro</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={carregandoLinkEdicao}
+                    onClick={handleGerarNovoLinkConclusao}
+                    className="px-2.5 py-1 bg-white hover:bg-blue-50 text-[#1e78f0] border border-blue-300 rounded-lg text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                  >
+                    <span>{linkConclusaoEdicao ? "Gerar Novo Link" : "Gerar link"}</span>
+                  </button>
+                </div>
+
+                {carregandoLinkEdicao ? (
+                  <p className="text-[11px] text-[#6b7385] animate-pulse">
+                    Verificando link de cadastro ativo...
+                  </p>
+                ) : linkConclusaoEdicao ? (
+                  <div className="space-y-1.5 pt-1">
+                    <p className="text-[11px] text-[#4b5563]">
+                      Existe um link ativo para este usuário (válido por até 7 dias após geração):
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        readOnly
+                        value={linkConclusaoEdicao.url}
+                        className="flex-1 px-2.5 py-1.5 text-[11px] font-mono bg-white border border-[#dfe2e8] rounded-lg text-[#111a2e] focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(linkConclusaoEdicao.url);
+                          setCopiadoLinkEdicao(true);
+                          setTimeout(() => setCopiadoLinkEdicao(false), 2500);
+                        }}
+                        className="px-2.5 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-[11px] font-bold rounded-lg flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                      >
+                        {copiadoLinkEdicao ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiadoLinkEdicao ? "Copiado!" : "Copiar"}</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-[#6b7385]">
+                    Nenhum link ativo pendente no momento. Clique no botão acima para gerar um link de cadastro para este usuário.
+                  </p>
+                )}
+              </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-[#dfe2e8]">
                 <button

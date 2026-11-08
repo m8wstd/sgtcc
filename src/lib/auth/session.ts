@@ -3,6 +3,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import {
   AuthServiceUnavailableError,
   ForbiddenError,
+  ProfileNotFoundError,
   SsoNotConfiguredError,
   UnauthorizedError,
 } from "@/lib/auth/errors";
@@ -96,7 +97,7 @@ export async function verifyInstitutionalIdToken(
   );
 
   if (!principal) {
-    throw new ForbiddenError("Usuário autenticado sem perfil institucional cadastrado.");
+    throw new ProfileNotFoundError("Usuário autenticado sem perfil institucional cadastrado.");
   }
 
   return { ...principal, token: decodedToken };
@@ -156,7 +157,7 @@ export async function getAuthenticatedSession(
   );
 
   if (!principal) {
-    throw new ForbiddenError("Usuário autenticado sem perfil institucional cadastrado.");
+    throw new ProfileNotFoundError("Usuário autenticado sem perfil institucional cadastrado.");
   }
 
   return { ...principal, token: decodedToken };

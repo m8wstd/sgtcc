@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { homeDoPerfil } from "@/lib/auth/perfis";
 import { validarSenhaSegura, validarEmail } from "@/lib/auth/cadastro-tokens";
-import type { PerfilEnum } from "@/types";
+import { PerfilEnum } from "@/types";
 
 export async function POST(request: Request) {
   if (!adminAuth || !adminDb) {
@@ -115,6 +115,23 @@ export async function POST(request: Request) {
     cursosCoordenados?: string[];
   };
 
+  // Restrição estrita de papéis: Somente ALUNO, ORIENTADOR, AVALIADOR e COORDENACAO são permitidos via convite
+  const perfisPermitidos = [
+    PerfilEnum.ALUNO,
+    PerfilEnum.ORIENTADOR,
+    PerfilEnum.AVALIADOR,
+    PerfilEnum.COORDENACAO,
+  ];
+  if (!perfil || !perfisPermitidos.includes(perfil)) {
+    return NextResponse.json(
+      {
+        error: "FORBIDDEN_ROLE",
+        message: "O convite possui um papel de usuário inválido ou restrito.",
+      },
+      { status: 403 }
+    );
+  }
+
   // Validação sintática do e-mail
   if (!validarEmail(email)) {
     return NextResponse.json(
@@ -123,9 +140,53 @@ export async function POST(request: Request) {
     );
   }
 
+  const matriculaLimpa = matricula ? matricula.trim() : "";
+
+  // Integridade de Matrícula e Prevenção de Colisão:
+  // Se for ALUNO, a matrícula é obrigatória e deve ser única.
+  // Se já existir registro em 'alunos/{matricula}', verifica se pertence a outro usuário para impedir roubo de TCC/vínculo.
+  if (perfil === PerfilEnum.ALUNO) {
+    if (!matriculaLimpa) {
+      return NextResponse.json(
+        { error: "MATRICULA_REQUIRED", message: "Matrícula é obrigatória para o cadastro de aluno." },
+        { status: 400 }
+      );
+    }
+
+    try {
+      const alunoExistente = await adminDb.collection("alunos").doc(matriculaLimpa).get();
+      if (alunoExistente.exists) {
+        // Se a matrícula já existe, verifica se pertence ao mesmo usuário (caso de conclusão de cadastro)
+        // Se pertencer a outro usuário, impede colisão e roubo de TCC
+        const donoMatricula = alunoExistente.data()?.usuario_id;
+        const usuarioDoc = await adminDb.collection("usuarios").where("email", "==", email.trim().toLowerCase()).limit(1).get();
+        const usuarioExistenteId = !usuarioDoc.empty ? usuarioDoc.docs[0].id : null;
+
+        if (donoMatricula && donoMatricula !== usuarioExistenteId) {
+          return NextResponse.json(
+            {
+              error: "MATRICULA_ALREADY_IN_USE",
+              message: "Esta matrícula já está associada a outro aluno na plataforma.",
+            },
+            { status: 409 }
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao verificar duplicidade de matrícula:", err);
+      return NextResponse.json(
+        { error: "DB_ERROR", message: "Erro ao validar unicidade da matrícula." },
+        { status: 503 }
+      );
+    }
+  }
+
+  let uid: string | null = null;
+  let usuarioJaExistiaNoAuth = false;
+  const docsCriados: { collection: string; id: string }[] = [];
+
   try {
-    // 4. Cria o usuário no Firebase Auth
-    let uid: string;
+    // 4. Cria o usuário no Firebase Auth (ou atualiza a senha caso o usuário já tenha sido pré-registrado)
     try {
       const userRecord = await adminAuth.createUser({
         email: email.trim().toLowerCase(),
@@ -137,62 +198,93 @@ export async function POST(request: Request) {
     } catch (authError: unknown) {
       const err = authError as { code?: string; message?: string };
       if (err.code === "auth/email-already-exists") {
-        return NextResponse.json(
-          { error: "EMAIL_EXISTS", message: "Este e-mail institucional já está cadastrado no sistema." },
-          { status: 409 }
-        );
+        // Se o usuário já existia no Auth (ex: criado previamente pelo admin para conclusão posterior),
+        // busca o UID e atualiza a senha para concluir o cadastro com sucesso
+        try {
+          const usuarioAuthExistente = await adminAuth.getUserByEmail(email.trim().toLowerCase());
+          uid = usuarioAuthExistente.uid;
+          usuarioJaExistiaNoAuth = true;
+          await adminAuth.updateUser(uid, {
+            password,
+            displayName: nome.trim(),
+            emailVerified: true,
+          });
+        } catch {
+          return NextResponse.json(
+            { error: "EMAIL_EXISTS", message: "Este e-mail institucional já está cadastrado no sistema." },
+            { status: 409 }
+          );
+        }
+      } else {
+        throw authError;
       }
-      throw authError;
     }
 
     // 5. Define Custom Claims
     await adminAuth.setCustomUserClaims(uid, {
       perfil,
-      ...(matricula && { matricula: matricula.trim() }),
+      ...(perfil === PerfilEnum.ALUNO && matriculaLimpa && { matricula: matriculaLimpa }),
     });
 
-    // 6. Salva documento na coleção usuarios
-    await adminDb.collection("usuarios").doc(uid).set({
+    // 6. Transação / Gravação no Firestore com Rollback compensatório
+    const batch = adminDb.batch();
+
+    // 6.1 Salva documento na coleção usuarios
+    const userRef = adminDb.collection("usuarios").doc(uid);
+    batch.set(userRef, {
       id: uid,
       nome: nome.trim(),
       email: email.trim().toLowerCase(),
       perfil,
-      matricula: matricula.trim(),
+      matricula: matriculaLimpa,
       ...(curso && { curso: curso.trim() }),
       ...(cursosCoordenados && { cursosCoordenados }),
       criadoEm: new Date().toISOString(),
     });
+    docsCriados.push({ collection: "usuarios", id: uid });
 
-    // 7. Salva registro na tabela de papel específico
-    if (perfil === "ALUNO" && matricula) {
-      await adminDb.collection("alunos").doc(matricula).set({
-        matricula,
+    // 6.2 Salva registro estritamente na tabela do papel específico
+    // Regra de Integridade: Apenas ALUNO pode ter registro na coleção 'alunos'
+    if (perfil === PerfilEnum.ALUNO && matriculaLimpa) {
+      const alunoRef = adminDb.collection("alunos").doc(matriculaLimpa);
+      batch.set(alunoRef, {
+        matricula: matriculaLimpa,
         usuario_id: uid,
       });
-    } else if (perfil === "ORIENTADOR") {
-      await adminDb.collection("professores_orientadores").doc(uid).set({
+      docsCriados.push({ collection: "alunos", id: matriculaLimpa });
+    } else if (perfil === PerfilEnum.ORIENTADOR) {
+      const orientadorRef = adminDb.collection("professores_orientadores").doc(uid);
+      batch.set(orientadorRef, {
         id: uid,
         usuario_id: uid,
       });
-    } else if (perfil === "AVALIADOR") {
-      await adminDb.collection("professores_avaliadores").doc(uid).set({
+      docsCriados.push({ collection: "professores_orientadores", id: uid });
+    } else if (perfil === PerfilEnum.AVALIADOR) {
+      const avaliadorRef = adminDb.collection("professores_avaliadores").doc(uid);
+      batch.set(avaliadorRef, {
         id: uid,
         usuario_id: uid,
       });
-    } else if (perfil === "COORDENACAO") {
-      await adminDb.collection("coordenadores").doc(uid).set({
+      docsCriados.push({ collection: "professores_avaliadores", id: uid });
+    } else if (perfil === PerfilEnum.COORDENACAO) {
+      const coordenadorRef = adminDb.collection("coordenadores").doc(uid);
+      batch.set(coordenadorRef, {
         id: uid,
         usuario_id: uid,
         cursos: cursosCoordenados ?? [curso ?? "Engenharia de Software"],
       });
+      docsCriados.push({ collection: "coordenadores", id: uid });
     }
 
-    // 8. Queima o token
-    await conviteDoc.ref.update({
+    // 6.3 Queima o token
+    batch.update(conviteDoc.ref, {
       usado: true,
       usadoEm: new Date().toISOString(),
       usuarioCriadoId: uid,
     });
+
+    // Executa as gravações no banco atomicamente
+    await batch.commit();
 
     return NextResponse.json({
       success: true,
@@ -203,13 +295,37 @@ export async function POST(request: Request) {
         email,
         nome,
         perfil,
-        matricula,
+        matricula: matriculaLimpa,
       },
     });
   } catch (error) {
-    console.error("Erro no cadastro via token:", error);
+    console.error("Erro no cadastro via token (iniciando compensação/rollback):", error);
+
+    // Rollback / Compensação para não deixar o e-mail preso nem documentos órfãos
+    // Se o usuário já existia no Auth antes deste cadastro, não o deletamos
+    if (uid && !usuarioJaExistiaNoAuth) {
+      try {
+        await adminAuth.deleteUser(uid);
+        console.log(`Compensação executada com sucesso: usuário ${uid} removido do Auth.`);
+      } catch (authDelErr) {
+        console.error(`Falha no rollback do Firebase Auth para o usuário ${uid}:`, authDelErr);
+      }
+
+      // Limpa documentos do Firestore que possam ter sido criados parcialmente
+      for (const item of docsCriados) {
+        try {
+          await adminDb.collection(item.collection).doc(item.id).delete();
+        } catch (cleanupErr) {
+          console.error(`Falha na limpeza do doc ${item.collection}/${item.id}:`, cleanupErr);
+        }
+      }
+    }
+
     return NextResponse.json(
-      { error: "SERVER_ERROR", message: "Erro ao concluir cadastro." },
+      {
+        error: "SERVER_ERROR",
+        message: "Erro ao concluir cadastro. As etapas parciais foram revertidas com segurança. Tente novamente.",
+      },
       { status: 500 }
     );
   }

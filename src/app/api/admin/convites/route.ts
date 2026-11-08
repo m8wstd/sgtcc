@@ -27,8 +27,8 @@ export interface ConviteCadastroDoc {
   usadoEm?: string;
 }
 
-// GET: Lista todos os convites pendentes/gerados (Apenas ADMIN)
-export async function GET() {
+// GET: Consulta convite de um usuário específico (por ?email=) ou lista os últimos 50 convites (Apenas ADMIN)
+export async function GET(request: Request) {
   const sessao = await requireSessao(PerfilEnum.ADMIN);
   if (!sessao) {
     return NextResponse.json({ error: "UNAUTHORIZED", message: "Acesso negado." }, { status: 403 });
@@ -38,13 +38,56 @@ export async function GET() {
     return NextResponse.json({ error: "CONFIG_ERROR", message: "Firebase indisponível" }, { status: 503 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const emailParam = searchParams.get("email");
+
   try {
+    if (emailParam) {
+      const emailLimpo = emailParam.trim().toLowerCase();
+      // Não combinamos where("email") com where("usado") e orderBy("criadoEm") para evitar necessidade de índice composto
+      const snap = await adminDb
+        .collection("convites_cadastro")
+        .where("email", "==", emailLimpo)
+        .get();
+
+      if (snap.empty) {
+        return NextResponse.json({ convite: null });
+      }
+
+      // Filtra em memória os convites não usados e pega o mais recente
+      const convitesValidos = snap.docs
+        .map((d) => ({ doc: d, data: d.data() as ConviteCadastroDoc }))
+        .filter((item) => !item.data.usado)
+        .sort((a, b) => new Date(b.data.criadoEm).getTime() - new Date(a.data.criadoEm).getTime());
+
+      if (convitesValidos.length === 0) {
+        return NextResponse.json({ convite: null });
+      }
+
+      const { doc, data } = convitesValidos[0];
+      const agora = Date.now();
+      const expira = data.expiraEm ? new Date(data.expiraEm).getTime() : 0;
+
+      // Se expirou, queima o convite e retorna null (não deve aparecer)
+      if (expira < agora) {
+        await doc.ref.update({ usado: true, expirado: true });
+        return NextResponse.json({ convite: null });
+      }
+
+      return NextResponse.json({
+        convite: {
+          ...data,
+          id: doc.id,
+        },
+      });
+    }
+
     const snap = await adminDb.collection("convites_cadastro").orderBy("criadoEm", "desc").limit(50).get();
     const convites = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     return NextResponse.json({ convites });
   } catch (error) {
-    console.error("Erro ao listar convites:", error);
-    return NextResponse.json({ convites: [] });
+    console.error("Erro ao consultar convites:", error);
+    return NextResponse.json({ convites: [], convite: null });
   }
 }
 
@@ -102,9 +145,13 @@ export async function POST(request: Request) {
   }
 
   // Verifica se o e-mail já existe na base de usuários cadastrados
+  // Nota: Se for uma solicitação de geração de link de conclusão de cadastro (gerarLinkConclusao = true),
+  // permitimos gerar link para um usuário já cadastrado que ainda precisa definir/concluir sua senha ou cadastro.
+  const { gerarLinkConclusao } = (body as { gerarLinkConclusao?: boolean }) ?? {};
+
   try {
     const usuarioExistente = await adminDb.collection("usuarios").where("email", "==", emailLimpo).limit(1).get();
-    if (!usuarioExistente.empty) {
+    if (!usuarioExistente.empty && !gerarLinkConclusao) {
       return NextResponse.json(
         { error: "EMAIL_EXISTS", message: "Este e-mail já possui uma conta ativa na plataforma." },
         { status: 409 }
@@ -114,9 +161,26 @@ export async function POST(request: Request) {
     console.warn("Erro ao checar e-mail duplicado:", err);
   }
 
-  // Define ou gera matrícula única com base na regra de negócio
+  // Validação e unicidade da matrícula
   let matriculaFinal = matricula?.trim();
-  if (!matriculaFinal) {
+  if (matriculaFinal) {
+    if (perfil === PerfilEnum.ALUNO) {
+      const snapAluno = await adminDb.collection("alunos").doc(matriculaFinal).get();
+      if (snapAluno.exists) {
+        // Se for geração de link de cadastro para usuário existente, verifica se a matrícula pertence a ele
+        const donoMatricula = snapAluno.data()?.usuario_id;
+        const usuarioDoc = await adminDb.collection("usuarios").where("email", "==", emailLimpo).limit(1).get();
+        const usuarioExistenteId = !usuarioDoc.empty ? usuarioDoc.docs[0].id : null;
+
+        if (donoMatricula && donoMatricula !== usuarioExistenteId) {
+          return NextResponse.json(
+            { error: "MATRICULA_ALREADY_IN_USE", message: "Esta matrícula já está associada a outro aluno no sistema." },
+            { status: 409 }
+          );
+        }
+      }
+    }
+  } else {
     if (perfil === PerfilEnum.ALUNO) {
       matriculaFinal = gerarMatriculaAluno();
       try {
@@ -153,7 +217,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Cria o usuário imediatamente no Firebase Auth e nas tabelas
+    // Cria o usuário no Firebase Auth com compensação atômica em caso de falha no Firestore
     let uid: string;
     try {
       const userRecord = await adminAuth.createUser({
@@ -174,52 +238,74 @@ export async function POST(request: Request) {
       throw authError;
     }
 
-    await adminAuth.setCustomUserClaims(uid, {
-      perfil,
-      ...(matriculaFinal && { matricula: matriculaFinal }),
-    });
+    try {
+      await adminAuth.setCustomUserClaims(uid, {
+        perfil,
+        ...(matriculaFinal && { matricula: matriculaFinal }),
+      });
 
-    const dadosUsuario = {
-      id: uid,
-      nome: nome.trim(),
-      email: emailLimpo,
-      perfil,
-      matricula: matriculaFinal,
-      curso: curso ? curso.trim() : undefined,
-      cursosCoordenados: perfil === PerfilEnum.COORDENACAO ? (cursosCoordenados ?? ["Engenharia de Software"]) : undefined,
-      criadoEm: new Date().toISOString(),
-    };
-
-    await adminDb.collection("usuarios").doc(uid).set(dadosUsuario);
-
-    if (perfil === PerfilEnum.ALUNO) {
-      await adminDb.collection("alunos").doc(matriculaFinal).set({
+      const dadosUsuario: Record<string, unknown> = {
+        id: uid,
+        nome: nome.trim(),
+        email: emailLimpo,
+        perfil,
         matricula: matriculaFinal,
-        usuario_id: uid,
-      });
-    } else if (perfil === PerfilEnum.ORIENTADOR) {
-      await adminDb.collection("professores_orientadores").doc(uid).set({
-        id: uid,
-        usuario_id: uid,
-      });
-    } else if (perfil === PerfilEnum.AVALIADOR) {
-      await adminDb.collection("professores_avaliadores").doc(uid).set({
-        id: uid,
-        usuario_id: uid,
-      });
-    } else if (perfil === PerfilEnum.COORDENACAO) {
-      await adminDb.collection("coordenadores").doc(uid).set({
-        id: uid,
-        usuario_id: uid,
-        cursos: cursosCoordenados ?? ["Engenharia de Software"],
-      });
-    }
+        criadoEm: new Date().toISOString(),
+      };
+      if (curso && curso.trim()) {
+        dadosUsuario.curso = curso.trim();
+      }
+      if (perfil === PerfilEnum.COORDENACAO) {
+        dadosUsuario.cursosCoordenados = cursosCoordenados && cursosCoordenados.length > 0
+          ? cursosCoordenados
+          : ["Engenharia de Software"];
+      }
 
-    return NextResponse.json({
-      success: true,
-      message: "Usuário cadastrado com sucesso com a senha configurada pelo Administrador!",
-      usuarioCriado: dadosUsuario,
-    });
+      const batch = adminDb.batch();
+      batch.set(adminDb.collection("usuarios").doc(uid), dadosUsuario);
+
+      if (perfil === PerfilEnum.ALUNO) {
+        batch.set(adminDb.collection("alunos").doc(matriculaFinal), {
+          matricula: matriculaFinal,
+          usuario_id: uid,
+        });
+      } else if (perfil === PerfilEnum.ORIENTADOR) {
+        batch.set(adminDb.collection("professores_orientadores").doc(uid), {
+          id: uid,
+          usuario_id: uid,
+        });
+      } else if (perfil === PerfilEnum.AVALIADOR) {
+        batch.set(adminDb.collection("professores_avaliadores").doc(uid), {
+          id: uid,
+          usuario_id: uid,
+        });
+      } else if (perfil === PerfilEnum.COORDENACAO) {
+        batch.set(adminDb.collection("coordenadores").doc(uid), {
+          id: uid,
+          usuario_id: uid,
+          cursos: cursosCoordenados ?? ["Engenharia de Software"],
+        });
+      }
+
+      await batch.commit();
+
+      return NextResponse.json({
+        success: true,
+        message: "Usuário cadastrado com sucesso com a senha configurada pelo Administrador!",
+        usuarioCriado: dadosUsuario,
+      });
+    } catch (saveError) {
+      console.error("Falha ao salvar usuário no Firestore após criação no Auth. Compensando:", saveError);
+      try {
+        await adminAuth.deleteUser(uid);
+      } catch (delErr) {
+        console.error("Falha ao deletar usuário do Auth durante rollback:", delErr);
+      }
+      return NextResponse.json(
+        { error: "SERVER_ERROR", message: "Erro ao registrar usuário no banco de dados. O e-mail foi liberado para nova tentativa." },
+        { status: 500 }
+      );
+    }
   }
 
   // Se não forneceu senha, gera token de convite para o usuário criar a senha
@@ -227,14 +313,28 @@ export async function POST(request: Request) {
   const agora = new Date();
   const expira = new Date(agora.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 dias (1 semana)
 
-  const convite: ConviteCadastroDoc = {
+  // Se for gerar um novo convite para um e-mail, invalida/queima convites anteriores pendentes para o mesmo e-mail
+  try {
+    const convitesAntigos = await adminDb
+      .collection("convites_cadastro")
+      .where("email", "==", emailLimpo)
+      .get();
+
+    for (const doc of convitesAntigos.docs) {
+      if (!doc.data().usado) {
+        await doc.ref.update({ usado: true, substituidoPor: token });
+      }
+    }
+  } catch (err) {
+    console.warn("Aviso ao invalidar convites anteriores:", err);
+  }
+
+  const convite: Record<string, unknown> = {
     id: token,
     nome: nome.trim(),
     email: emailLimpo,
     perfil,
     matricula: matriculaFinal,
-    curso: curso ? curso.trim() : (perfil === PerfilEnum.ALUNO ? "Engenharia de Software" : undefined),
-    cursosCoordenados: perfil === PerfilEnum.COORDENACAO ? (cursosCoordenados || ["Engenharia de Software"]) : undefined,
     enviarEmail: Boolean(enviarEmail),
     emailEnviado: false,
     criadoPor: sessao.usuario.id,
@@ -242,6 +342,18 @@ export async function POST(request: Request) {
     expiraEm: expira.toISOString(),
     usado: false,
   };
+
+  if (curso && curso.trim()) {
+    convite.curso = curso.trim();
+  } else if (perfil === PerfilEnum.ALUNO) {
+    convite.curso = "Engenharia de Software";
+  }
+
+  if (perfil === PerfilEnum.COORDENACAO) {
+    convite.cursosCoordenados = cursosCoordenados && cursosCoordenados.length > 0
+      ? cursosCoordenados
+      : ["Engenharia de Software"];
+  }
 
   try {
     await adminDb.collection("convites_cadastro").doc(token).set(convite);

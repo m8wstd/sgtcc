@@ -6,6 +6,7 @@ import {
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/auth/session";
 import { homeDoPerfil } from "@/lib/auth/perfis";
+import { getServerSsoConfig, isInstitutionalEmail } from "@/lib/auth/config";
 import type { PerfilEnum } from "@/types";
 
 export async function POST(request: Request) {
@@ -34,7 +35,17 @@ export async function POST(request: Request) {
   let email = identifier.trim();
 
   // Se o identificador for uma matrícula (sem @), busca o e-mail correspondente no Firestore
-  if (!email.includes("@") && adminDb) {
+  if (!email.includes("@")) {
+    if (!adminDb) {
+      return NextResponse.json(
+        {
+          error: "AUTH_SERVICE_UNAVAILABLE",
+          message: "Serviço de autenticação e banco de dados temporariamente indisponível.",
+        },
+        { status: 503 },
+      );
+    }
+
     try {
       const alunoSnap = await adminDb.collection("alunos").doc(email).get();
       if (alunoSnap.exists) {
@@ -46,9 +57,29 @@ export async function POST(request: Request) {
           }
         }
       }
-    } catch {
-      // continua com o identificador original caso a busca falhe
+    } catch (dbErr) {
+      console.error("Erro ao resolver matrícula no Firestore:", dbErr);
+      return NextResponse.json(
+        {
+          error: "AUTH_SERVICE_UNAVAILABLE",
+          message: "Serviço de banco de dados temporariamente indisponível.",
+        },
+        { status: 503 },
+      );
     }
+  }
+
+  // Unificação de validação com o SSO institucional:
+  // Se o domínio institucional estiver configurado no servidor, valida se o e-mail pertence ao domínio
+  const ssoConfig = getServerSsoConfig();
+  if (ssoConfig && ssoConfig.allowedEmailDomain && !isInstitutionalEmail(email, ssoConfig)) {
+    return NextResponse.json(
+      {
+        error: "FORBIDDEN",
+        message: "O e-mail não pertence ao domínio institucional permitido.",
+      },
+      { status: 403 },
+    );
   }
 
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -90,17 +121,42 @@ export async function POST(request: Request) {
       displayName?: string;
     };
 
-    // Busca o perfil do usuário no Firestore
-    let perfil: PerfilEnum = "ALUNO" as PerfilEnum;
-    let nome = authData.displayName ?? "Usuário";
+    if (!adminDb) {
+      return NextResponse.json(
+        {
+          error: "AUTH_SERVICE_UNAVAILABLE",
+          message: "Serviço de banco de dados temporariamente indisponível.",
+        },
+        { status: 503 },
+      );
+    }
 
-    if (adminDb) {
-      const userDoc = await adminDb.collection("usuarios").doc(authData.localId).get();
-      if (userDoc.exists) {
-        const dados = userDoc.data();
-        if (dados?.perfil) perfil = dados.perfil;
-        if (dados?.nome) nome = dados.nome;
-      }
+    // Busca o perfil do usuário no Firestore
+    const userDoc = await adminDb.collection("usuarios").doc(authData.localId).get();
+    if (!userDoc.exists) {
+      return NextResponse.json(
+        {
+          error: "PROFILE_NOT_FOUND",
+          message:
+            "Usuário autenticado, mas seu perfil institucional não está cadastrado. Solicite acesso ao Administrador ou conclua seu cadastro.",
+        },
+        { status: 403 },
+      );
+    }
+
+    const dados = userDoc.data();
+    const perfil = dados?.perfil as PerfilEnum | undefined;
+    const nome = dados?.nome || authData.displayName || "Usuário";
+
+    if (!perfil) {
+      return NextResponse.json(
+        {
+          error: "PROFILE_NOT_FOUND",
+          message:
+            "Perfil institucional incompleto ou não definido. Entre em contato com o suporte ou administração.",
+        },
+        { status: 403 },
+      );
     }
 
     // Cria o cookie de sessão seguro do SGTCC

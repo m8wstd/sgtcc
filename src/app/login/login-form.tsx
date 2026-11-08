@@ -19,9 +19,10 @@ import { validarEmail } from "@/lib/auth/cadastro-tokens";
 interface LoginFormProps {
   destino: string;
   initialTab?: "login" | "criar-senha" | "esqueci-senha";
+  erroInicial?: string;
 }
 
-export function LoginForm({ destino, initialTab = "login" }: LoginFormProps) {
+export function LoginForm({ destino, initialTab = "login", erroInicial }: LoginFormProps) {
   const router = useRouter();
   const [modo, setModo] = useState<"login" | "criar-senha" | "esqueci-senha">(initialTab);
 
@@ -30,7 +31,7 @@ export function LoginForm({ destino, initialTab = "login" }: LoginFormProps) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(erroInicial || null);
 
   // Estados da Solicitação de Criação de Senha
   const [solicitarEmail, setSolicitarEmail] = useState("");

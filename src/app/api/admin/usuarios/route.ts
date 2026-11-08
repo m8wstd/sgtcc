@@ -65,6 +65,24 @@ export async function PUT(request: Request) {
     }
   }
 
+  // Se for atribuir matrícula a ALUNO, valida se a matrícula já pertence a outro usuário
+  const matriculaLimpa = matricula?.trim();
+  if (perfil === PerfilEnum.ALUNO && matriculaLimpa) {
+    const snapExistente = await adminDb.collection("alunos").doc(matriculaLimpa).get();
+    if (snapExistente.exists) {
+      const alunoData = snapExistente.data();
+      if (alunoData?.usuario_id && alunoData.usuario_id !== id) {
+        return NextResponse.json(
+          {
+            error: "MATRICULA_ALREADY_IN_USE",
+            message: "Esta matrícula já está associada a outro aluno no sistema.",
+          },
+          { status: 409 }
+        );
+      }
+    }
+  }
+
   try {
     // 1. Atualiza no Firebase Auth (nome, e-mail e opcionalmente senha)
     try {
@@ -79,7 +97,7 @@ export async function PUT(request: Request) {
       await adminAuth.updateUser(id, updatePayload);
       await adminAuth.setCustomUserClaims(id, {
         perfil,
-        ...(matricula && { matricula: matricula.trim() }),
+        ...(perfil === PerfilEnum.ALUNO && matriculaLimpa && { matricula: matriculaLimpa }),
       });
     } catch (authError) {
       console.warn("Usuário não encontrado no Auth ou erro ao atualizar dados de autenticação:", authError);
@@ -92,7 +110,7 @@ export async function PUT(request: Request) {
       email: emailLimpo,
       perfil,
     };
-    if (matricula) dadosUsuario.matricula = matricula.trim();
+    if (matriculaLimpa) dadosUsuario.matricula = matriculaLimpa;
     if (curso) dadosUsuario.curso = curso.trim();
     if (cursosCoordenados) dadosUsuario.cursosCoordenados = cursosCoordenados;
 
@@ -108,10 +126,10 @@ export async function PUT(request: Request) {
         },
         { merge: true }
       );
-    } else if (perfil === PerfilEnum.ALUNO && matricula) {
-      await adminDb.collection("alunos").doc(matricula.trim()).set(
+    } else if (perfil === PerfilEnum.ALUNO && matriculaLimpa) {
+      await adminDb.collection("alunos").doc(matriculaLimpa).set(
         {
-          matricula: matricula.trim(),
+          matricula: matriculaLimpa,
           usuario_id: id,
         },
         { merge: true }
