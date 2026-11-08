@@ -128,7 +128,7 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
         <StatCard
           label="Total de Orientandos"
           value={stats.total}
-          variant="blue"
+          variant="primary"
           icon={<Users className="w-5 h-5" />}
           className="p-5"
           onClick={() => setStatusAtivo("todos")}

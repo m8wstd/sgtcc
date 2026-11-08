@@ -247,7 +247,7 @@ export function LoginForm({ destino, initialTab = "login", erroInicial }: LoginF
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       disabled={loading}
-                      className="w-full px-3.5 py-2.5 pr-10 rounded-lg border border-[#dfe2e8] bg-white text-[#111a2e] placeholder-gray-400 focus:outline-none focus:border-[#1e78f0] focus:ring-1 focus:ring-[#1e78f0] text-sm transition-colors"
+                      className="w-full px-3.5 py-2.5 pr-10 rounded-lg border border-[#dfe2e8] bg-white text-[#111a2e] placeholder:text-gray-300 placeholder:opacity-40 focus:outline-none focus:border-[#1e78f0] focus:ring-1 focus:ring-[#1e78f0] text-sm transition-colors"
                     />
                     <button
                       type="button"

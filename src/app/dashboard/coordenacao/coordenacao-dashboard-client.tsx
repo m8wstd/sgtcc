@@ -16,7 +16,6 @@ import {
   Settings,
   X,
   Check,
-  Building,
   AlertTriangle,
   Clock,
   Layers,
@@ -33,8 +32,8 @@ interface CoordenacaoDashboardClientProps {
 type PainelAcaoTipo = "alocacao" | "cronograma" | "troca" | null;
 
 export function CoordenacaoDashboardClient({
-  nomeUsuario,
-  perfil,
+  nomeUsuario: _nomeUsuario,
+  perfil: _perfil,
   tccs: tccsIniciais,
 }: CoordenacaoDashboardClientProps) {
   const [tccs, setTccs] = useState<TccResumo[]>(tccsIniciais);
@@ -42,6 +41,7 @@ export function CoordenacaoDashboardClient({
   const [statusFiltro, setStatusFiltro] = useState<string>("todos");
   const [cursoFiltro, setCursoFiltro] = useState<string>("todos");
   const [faseFiltro, setFaseFiltro] = useState<"todas" | "1" | "2">("todas");
+  const [vistaAtiva, setVistaAtiva] = useState<"tccs" | "docentes">("tccs");
 
   // Mini Painel Acoplado de Ações da Coordenação
   const [painelAcaoAtivo, setPainelAcaoAtivo] = useState<PainelAcaoTipo>(null);
@@ -59,19 +59,80 @@ export function CoordenacaoDashboardClient({
     { etapa: "5. Entrega Final da Monografia à Banca", data: "2026-11-30" },
   ]);
 
-  const [bancaTcc, setBancaTcc] = useState("");
-  const [bancaData, setBancaData] = useState("");
-  const pendentes = tccs.filter((t) => t.statusGeral === "EM_ANDAMENTO");
 
-  const avisar = (msg: string) => {
+  /**
+   * Bug 1 – Retorna o rótulo correto do status para exibição no card,
+   * levando em conta o filtro ativo (sub-status como AGUARDANDO_ENVIO e ATRASADAS
+   * não existem em statusGeral; precisam de rótulo explícito).
+   */
+  function rotuloStatusCard(tcc: TccResumo): string {
+    if (statusFiltro === "AGUARDANDO_ENVIO" &&
+        tcc.statusGeral === "EM_ANDAMENTO" &&
+        (!tcc.versaoFinalUrl || tcc.fase === 1)) {
+      return "Aguardando envio";
+    }
+    if (statusFiltro === "ATRASADAS" &&
+        tcc.statusGeral === "EM_ANDAMENTO" &&
+        tcc.id.includes("maria")) {
+      return "Atrasada";
+    }
+    return ROTULO_STATUS_TCC[tcc.statusGeral] ?? tcc.statusGeral;
+  }
+
+  /**
+   * Bug 3 – Cor e rótulo da etapa atual do TCC para exibição no card.
+   * Inferimos a etapa com base nos dados disponíveis no TccResumo.
+   */
+  type EtapaVisual = {
+    rotulo: string;
+    bg: string;
+    text: string;
+  };
+  function etapaVisual(tcc: TccResumo): EtapaVisual {
+    if (tcc.statusGeral === "APROVADO" || tcc.statusGeral === "DEFENDIDO") {
+      return { rotulo: "Concluído", bg: "bg-[#86d994]", text: "text-[#111a2e]" };
+    }
+    if (tcc.statusGeral === "REPROVADO") {
+      return { rotulo: "Reprovado", bg: "bg-[#ff7f7f]", text: "text-[#111a2e]" };
+    }
+    if (tcc.statusGeral === "AGUARDANDO_BANCA") {
+      return { rotulo: "Aguardando banca", bg: "bg-[#8ec5ff]", text: "text-[#111a2e]" };
+    }
+    // EM_ANDAMENTO — detectar sub-estado
+    if (tcc.statusGeral === "EM_ANDAMENTO") {
+      // Atrasada (heurística atual do sistema)
+      if (tcc.id.includes("maria")) {
+        return { rotulo: "Entrega atrasada", bg: "bg-[#ff7f7f]", text: "text-[#111a2e]" };
+      }
+      // Fase 2 com versão final → quase concluído
+      if (tcc.fase === 2 && tcc.versaoFinalUrl) {
+        return { rotulo: "Versão final enviada", bg: "bg-[#86d994]", text: "text-[#111a2e]" };
+      }
+      // Aguardando envio
+      if (!tcc.versaoFinalUrl || tcc.fase === 1) {
+        return { rotulo: "Aguardando envio", bg: "bg-[#d5d9e0]", text: "text-[#111a2e]" };
+      }
+      return { rotulo: "Em andamento", bg: "bg-[#ffd84d]", text: "text-[#111a2e]" };
+    }
+    return { rotulo: tcc.statusGeral, bg: "bg-[#d5d9e0]", text: "text-[#111a2e]" };
+  }
+
+  const _avisar = (msg: string) => {
     setAlertaSucesso(msg);
     setTimeout(() => setAlertaSucesso(null), 5000);
   };
 
-  const cargaOrientadores = useMemo(() => {
-    const m = new Map<string, number>();
-    tccs.forEach((t) => m.set(t.orientadorNome, (m.get(t.orientadorNome) ?? 0) + 1));
-    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+  const docentesAtivos = useMemo(() => {
+    const m = new Map<string, { nome: string; total: number; emAndamento: number; aguardandoBanca: number; concluidos: number }>();
+    tccs.forEach((t) => {
+      const atual = m.get(t.orientadorNome) ?? { nome: t.orientadorNome, total: 0, emAndamento: 0, aguardandoBanca: 0, concluidos: 0 };
+      atual.total += 1;
+      if (t.statusGeral === "EM_ANDAMENTO") atual.emAndamento += 1;
+      else if (t.statusGeral === "AGUARDANDO_BANCA") atual.aguardandoBanca += 1;
+      else if (t.statusGeral === "APROVADO" || t.statusGeral === "DEFENDIDO") atual.concluidos += 1;
+      m.set(t.orientadorNome, atual);
+    });
+    return Array.from(m.values()).sort((a, b) => b.total - a.total);
   }, [tccs]);
 
   const cursosDisponiveis = useMemo(() => {
@@ -185,19 +246,19 @@ export function CoordenacaoDashboardClient({
         <StatCard
           label="Total de Orientações"
           value={stats.totalTccs}
-          variant="blue"
+          variant="primary"
           icon={<GraduationCap className="w-4 h-4" />}
           className="p-4"
-          onClick={() => setStatusFiltro("todos")}
-          active={statusFiltro === "todos"}
+          onClick={() => { setStatusFiltro("todos"); setVistaAtiva("tccs"); }}
+          active={statusFiltro === "todos" && vistaAtiva === "tccs"}
         />
         <StatCard
           label="Em Andamento"
           value={stats.emAndamento}
           variant="yellow"
           className="p-4"
-          onClick={() => setStatusFiltro(statusFiltro === "EM_ANDAMENTO" ? "todos" : "EM_ANDAMENTO")}
-          active={statusFiltro === "EM_ANDAMENTO"}
+          onClick={() => { setStatusFiltro(statusFiltro === "EM_ANDAMENTO" ? "todos" : "EM_ANDAMENTO"); setVistaAtiva("tccs"); }}
+          active={statusFiltro === "EM_ANDAMENTO" && vistaAtiva === "tccs"}
         />
         <StatCard
           label="Aguardando Envio"
@@ -205,8 +266,8 @@ export function CoordenacaoDashboardClient({
           variant="neutral"
           icon={<Clock className="w-4 h-4" />}
           className="p-4"
-          onClick={() => setStatusFiltro(statusFiltro === "AGUARDANDO_ENVIO" ? "todos" : "AGUARDANDO_ENVIO")}
-          active={statusFiltro === "AGUARDANDO_ENVIO"}
+          onClick={() => { setStatusFiltro(statusFiltro === "AGUARDANDO_ENVIO" ? "todos" : "AGUARDANDO_ENVIO"); setVistaAtiva("tccs"); }}
+          active={statusFiltro === "AGUARDANDO_ENVIO" && vistaAtiva === "tccs"}
         />
         <StatCard
           label="Entregas Atrasadas"
@@ -214,16 +275,16 @@ export function CoordenacaoDashboardClient({
           variant="red"
           icon={<AlertTriangle className="w-4 h-4" />}
           className="p-4"
-          onClick={() => setStatusFiltro(statusFiltro === "ATRASADAS" ? "todos" : "ATRASADAS")}
-          active={statusFiltro === "ATRASADAS"}
+          onClick={() => { setStatusFiltro(statusFiltro === "ATRASADAS" ? "todos" : "ATRASADAS"); setVistaAtiva("tccs"); }}
+          active={statusFiltro === "ATRASADAS" && vistaAtiva === "tccs"}
         />
         <StatCard
           label="Aguardando Banca"
           value={stats.aguardandoBanca}
           variant="neutral"
           className="p-4"
-          onClick={() => setStatusFiltro(statusFiltro === "AGUARDANDO_BANCA" ? "todos" : "AGUARDANDO_BANCA")}
-          active={statusFiltro === "AGUARDANDO_BANCA"}
+          onClick={() => { setStatusFiltro(statusFiltro === "AGUARDANDO_BANCA" ? "todos" : "AGUARDANDO_BANCA"); setVistaAtiva("tccs"); }}
+          active={statusFiltro === "AGUARDANDO_BANCA" && vistaAtiva === "tccs"}
         />
         <StatCard
           label="Docentes Ativos"
@@ -231,8 +292,10 @@ export function CoordenacaoDashboardClient({
           variant="green"
           icon={<Users className="w-4 h-4" />}
           className="p-4"
-          onClick={() => setStatusFiltro("todos")}
-          active={false}
+          onClick={() => {
+            setVistaAtiva((v) => (v === "docentes" ? "tccs" : "docentes"));
+          }}
+          active={vistaAtiva === "docentes"}
         />
       </div>
 
@@ -547,7 +610,7 @@ export function CoordenacaoDashboardClient({
           {/* Status Geral com opções de busca específicas */}
           <select
             value={statusFiltro}
-            onChange={(e) => setStatusFiltro(e.target.value)}
+            onChange={(e) => { setStatusFiltro(e.target.value); setVistaAtiva("tccs"); }}
             className="text-xs bg-white border border-[#dfe2e8] rounded-lg px-3 py-1.5 font-medium text-[#111a2e] focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
           >
             <option value="todos">Todos os Status</option>
@@ -561,7 +624,7 @@ export function CoordenacaoDashboardClient({
           {statusFiltro !== "todos" && (
             <button
               type="button"
-              onClick={() => setStatusFiltro("todos")}
+              onClick={() => { setStatusFiltro("todos"); setVistaAtiva("tccs"); }}
               className="text-[11px] font-semibold text-[#1e78f0] hover:underline cursor-pointer"
             >
               Limpar filtro de status
@@ -581,84 +644,177 @@ export function CoordenacaoDashboardClient({
         </div>
       </div>
 
-      {/* Lista Limpa e Direta de Trabalhos */}
-      <div className="border border-[#dfe2e8] rounded-[10px] overflow-hidden bg-white shadow-xs">
-        <div className="hidden md:grid grid-cols-[1.5fr_2fr_1.4fr_130px_40px] gap-4 px-6 py-3 bg-[#f4f5f7] border-b border-[#dfe2e8] text-xs font-semibold text-[#6b7385]">
-          <span>Aluno</span>
-          <span>Tema / Projeto</span>
-          <span>Orientador Responsável</span>
-          <span>Status</span>
-          <span className="text-right">Ação</span>
-        </div>
-
-        {tccsFiltrados.length === 0 ? (
-          <div className="p-10 text-center text-sm text-[#6b7385]">
-            Nenhum TCC encontrado para os filtros selecionados.
+      {/* Bug 2 – Vista de Docentes Ativos */}
+      {vistaAtiva === "docentes" ? (
+        <div className="border border-[#dfe2e8] rounded-[10px] overflow-hidden bg-white shadow-xs">
+          <div className="px-6 py-3 bg-[#f4f5f7] border-b border-[#dfe2e8] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#1e78f0]" />
+              <span className="text-xs font-bold text-[#111a2e] uppercase tracking-wider">
+                Docentes Ativos — {docentesAtivos.length} professor{docentesAtivos.length !== 1 ? "es" : ""}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setVistaAtiva("tccs")}
+              className="text-[11px] font-semibold text-[#1e78f0] hover:underline cursor-pointer flex items-center gap-1"
+            >
+              <X className="w-3 h-3" /> Voltar para lista de TCCs
+            </button>
           </div>
-        ) : (
-          <div className="divide-y divide-[#dfe2e8]">
-            {tccsFiltrados.map((t) => {
-              const statusRotulo = ROTULO_STATUS_TCC[t.statusGeral] ?? t.statusGeral;
 
-              return (
-                <Link
-                  key={t.id}
-                  href={`/dashboard/tcc/${t.id}`}
-                  className="block p-4 sm:px-6 sm:py-4 hover:bg-[#f4f5f7] transition-colors group cursor-pointer"
-                  title="Abrir TCC com visualização e recursos de orientação"
+          {docentesAtivos.length === 0 ? (
+            <div className="p-10 text-center text-sm text-[#6b7385]">
+              Nenhum docente encontrado.
+            </div>
+          ) : (
+            <div className="divide-y divide-[#dfe2e8]">
+              {/* Cabeçalho */}
+              <div className="hidden md:grid grid-cols-[2fr_80px_90px_100px_90px] gap-4 px-6 py-2.5 text-xs font-semibold text-[#6b7385]">
+                <span>Docente</span>
+                <span className="text-center">Total</span>
+                <span className="text-center">Em andamento</span>
+                <span className="text-center">Ag. Banca</span>
+                <span className="text-center">Concluídos</span>
+              </div>
+              {docentesAtivos.map((d) => (
+                <div
+                  key={d.nome}
+                  className="px-4 sm:px-6 py-3.5 flex flex-col md:grid md:grid-cols-[2fr_80px_90px_100px_90px] gap-2 md:gap-4 md:items-center"
                 >
-                  <div className="hidden md:grid grid-cols-[1.5fr_2fr_1.4fr_130px_40px] gap-4 items-center">
-                    <div className="min-w-0">
-                      <b className="block text-sm font-semibold text-[#111a2e] truncate group-hover:text-[#1e78f0] transition-colors">
-                        {t.alunoNome}
-                      </b>
-                      <small className="text-xs text-[#6b7385]">Matrícula: {t.aluno_id}</small>
-                    </div>
-
-                    <div className="min-w-0">
-                      <p className="text-xs text-[#111a2e] font-medium truncate">{t.titulo}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-[10px] font-bold text-[#1e78f0] bg-blue-50 px-1.5 py-0.2 rounded">
-                          {t.fase ? `TCC ${t.fase}` : "TCC 1"}
-                        </span>
-                        {t.curso && <span className="text-[11px] text-[#6b7385]">&bull; {t.curso}</span>}
-                      </div>
-                    </div>
-
-                    <div className="min-w-0">
-                      <span className="text-xs text-[#111a2e] font-medium block truncate">
-                        {t.orientadorNome}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-full bg-[#1e78f0]/10 flex items-center justify-center shrink-0">
+                      <span className="text-[11px] font-bold text-[#1e78f0]">
+                        {d.nome.charAt(0).toUpperCase()}
                       </span>
-                      <small className="text-[11px] text-[#6b7385]">Professor Orientador</small>
                     </div>
-
-                    <div>
-                      <StatusPill status={statusRotulo} />
-                    </div>
-
-                    <div className="flex justify-end">
-                      <ChevronRight className="w-4 h-4 text-[#6b7385] group-hover:text-[#1e78f0] group-hover:translate-x-0.5 transition-all" />
+                    <div className="min-w-0">
+                      <b className="text-sm font-semibold text-[#111a2e] block truncate">{d.nome}</b>
+                      <small className="text-xs text-[#6b7385]">Professor Orientador</small>
                     </div>
                   </div>
 
-                  <div className="flex md:hidden flex-col gap-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <b className="text-sm font-semibold text-[#111a2e] block group-hover:text-[#1e78f0]">
+                  {/* Mobile: badges inline */}
+                  <div className="flex flex-wrap gap-2 md:contents">
+                    <span className="md:text-center text-xs font-bold text-[#111a2e] bg-[#8ec5ff]/70 px-2.5 py-1 rounded-full md:bg-transparent md:px-0 md:py-0 md:rounded-none">
+                      <span className="md:hidden text-[10px] font-normal text-[#6b7385] mr-1">Total:</span>
+                      {d.total}
+                    </span>
+                    <span className="md:text-center text-xs font-semibold text-[#111a2e] bg-[#ffd84d]/70 px-2.5 py-1 rounded-full md:bg-transparent md:px-0 md:py-0 md:rounded-none">
+                      <span className="md:hidden text-[10px] font-normal text-[#6b7385] mr-1">Em andamento:</span>
+                      {d.emAndamento}
+                    </span>
+                    <span className="md:text-center text-xs font-semibold text-[#111a2e] bg-[#d5d9e0]/70 px-2.5 py-1 rounded-full md:bg-transparent md:px-0 md:py-0 md:rounded-none">
+                      <span className="md:hidden text-[10px] font-normal text-[#6b7385] mr-1">Ag. Banca:</span>
+                      {d.aguardandoBanca}
+                    </span>
+                    <span className="md:text-center text-xs font-semibold text-[#111a2e] bg-[#86d994]/70 px-2.5 py-1 rounded-full md:bg-transparent md:px-0 md:py-0 md:rounded-none">
+                      <span className="md:hidden text-[10px] font-normal text-[#6b7385] mr-1">Concluídos:</span>
+                      {d.concluidos}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Vista padrão – Lista de TCCs */
+        <div className="border border-[#dfe2e8] rounded-[10px] overflow-hidden bg-white shadow-xs">
+          <div className="hidden md:grid grid-cols-[1.5fr_2fr_1.4fr_130px_40px] gap-4 px-6 py-3 bg-[#f4f5f7] border-b border-[#dfe2e8] text-xs font-semibold text-[#6b7385]">
+            <span>Aluno</span>
+            <span>Tema / Projeto</span>
+            <span>Orientador Responsável</span>
+            <span>Status</span>
+            <span className="text-right">Ação</span>
+          </div>
+
+          {tccsFiltrados.length === 0 ? (
+            <div className="p-10 text-center text-sm text-[#6b7385]">
+              Nenhum TCC encontrado para os filtros selecionados.
+            </div>
+          ) : (
+            <div className="divide-y divide-[#dfe2e8]">
+              {tccsFiltrados.map((t) => {
+                // Bug 1 – rótulo correto por filtro ativo
+                const statusRotulo = rotuloStatusCard(t);
+                // Bug 3 – badge de etapa colorido
+                const etapa = etapaVisual(t);
+
+                return (
+                  <Link
+                    key={t.id}
+                    href={`/dashboard/tcc/${t.id}`}
+                    className="block p-4 sm:px-6 sm:py-4 hover:bg-[#f4f5f7] transition-colors group cursor-pointer"
+                    title="Abrir TCC com visualização e recursos de orientação"
+                  >
+                    <div className="hidden md:grid grid-cols-[1.5fr_2fr_1.4fr_130px_40px] gap-4 items-center">
+                      <div className="min-w-0">
+                        <b className="block text-sm font-semibold text-[#111a2e] truncate group-hover:text-[#1e78f0] transition-colors">
                           {t.alunoNome}
                         </b>
-                        <small className="text-xs text-[#6b7385]">Orientador: {t.orientadorNome}</small>
+                        <small className="text-xs text-[#6b7385]">Matrícula: {t.aluno_id}</small>
                       </div>
-                      <StatusPill status={statusRotulo} />
+
+                      <div className="min-w-0">
+                        <p className="text-xs text-[#111a2e] font-medium truncate">{t.titulo}</p>
+                        {/* Bug 3 – badge de etapa com cor contextual */}
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] font-bold text-[#1e78f0] bg-blue-50 px-1.5 py-0.5 rounded">
+                            {t.fase ? `TCC ${t.fase}` : "TCC 1"}
+                          </span>
+                          <span
+                            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${etapa.bg} ${etapa.text}`}
+                          >
+                            {etapa.rotulo}
+                          </span>
+                          {t.curso && <span className="text-[11px] text-[#6b7385]">&bull; {t.curso}</span>}
+                        </div>
+                      </div>
+
+                      <div className="min-w-0">
+                        <span className="text-xs text-[#111a2e] font-medium block truncate">
+                          {t.orientadorNome}
+                        </span>
+                        <small className="text-[11px] text-[#6b7385]">Professor Orientador</small>
+                      </div>
+
+                      <div>
+                        {/* Bug 1 – StatusPill com rótulo correto */}
+                        <StatusPill status={statusRotulo} />
+                      </div>
+
+                      <div className="flex justify-end">
+                        <ChevronRight className="w-4 h-4 text-[#6b7385] group-hover:text-[#1e78f0] group-hover:translate-x-0.5 transition-all" />
+                      </div>
                     </div>
-                    <p className="text-xs text-[#111a2e] line-clamp-2">{t.titulo}</p>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </div>
+
+                    {/* Mobile */}
+                    <div className="flex md:hidden flex-col gap-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <b className="text-sm font-semibold text-[#111a2e] block group-hover:text-[#1e78f0]">
+                            {t.alunoNome}
+                          </b>
+                          <small className="text-xs text-[#6b7385]">Orientador: {t.orientadorNome}</small>
+                        </div>
+                        <StatusPill status={statusRotulo} />
+                      </div>
+                      <p className="text-xs text-[#111a2e] line-clamp-2">{t.titulo}</p>
+                      {/* Bug 3 – badge de etapa mobile */}
+                      <span
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded self-start ${etapa.bg} ${etapa.text}`}
+                      >
+                        {etapa.rotulo}
+                      </span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

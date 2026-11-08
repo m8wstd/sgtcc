@@ -13,9 +13,10 @@ import {
   CalendarClock,
   UserCheck,
   UploadCloud,
-  Eye,
-  EyeOff,
   Lock,
+  User,
+  GraduationCap,
+  BookOpen,
 } from "lucide-react";
 import { StatusPill } from "@/components/ui/status-pill";
 import { formatarData, formatarDataHora } from "@/components/layout/status";
@@ -56,35 +57,20 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
   const isAluno = papelUsuario === "aluno";
   const rotuloFase = tcc.fase ? `TCC ${tcc.fase}` : "TCC";
 
-  // ----- Documento: leitor embutido (US14) e abertura em nova aba -----
-  const [leitorUrl, setLeitorUrl] = useState<string | null>(null);
+  // ----- Documento: download / abertura -----
   const [carregandoDoc, setCarregandoDoc] = useState(false);
   const [erroDoc, setErroDoc] = useState<string | null>(null);
 
-  async function alternarLeitor() {
-    if (!versaoFinal) return;
-    if (leitorUrl) {
-      setLeitorUrl(null);
-      return;
-    }
-    setCarregandoDoc(true);
-    setErroDoc(null);
-    try {
-      setLeitorUrl(await urlDoDocumento(versaoFinal.id));
-    } catch (e) {
-      setErroDoc(e instanceof Error ? e.message : "Erro ao abrir o documento.");
-    } finally {
-      setCarregandoDoc(false);
-    }
-  }
-
   async function abrirEmNovaAba() {
     if (!versaoFinal) return;
+    setCarregandoDoc(true);
     setErroDoc(null);
     try {
       window.open(await urlDoDocumento(versaoFinal.id), "_blank", "noopener,noreferrer");
     } catch (e) {
-      setErroDoc(e instanceof Error ? e.message : "Erro ao abrir o documento.");
+      setErroDoc(e instanceof Error ? e.message : "Erro ao baixar o documento.");
+    } finally {
+      setCarregandoDoc(false);
     }
   }
 
@@ -156,9 +142,9 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
       </div>
 
       {/* Cabeçalho */}
-      <div className="border border-[#dfe2e8] rounded-[10px] p-6 bg-white shadow-xs space-y-4">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div className="space-y-1.5 max-w-2xl">
+      <div className="relative border border-[#dfe2e8] rounded-[10px] p-6 bg-white shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+          <div className="space-y-2 max-w-2xl">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-bold text-[#1e78f0] uppercase tracking-wider">
                 {rotuloFase} &bull; Banca Avaliadora
@@ -166,14 +152,33 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
               <StatusPill status={cabecalhoStatus} />
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-[#111a2e] leading-snug">{tcc.titulo}</h1>
-            <p className="text-xs sm:text-sm text-[#6b7385]">
-              Aluno: <b className="text-[#111a2e]">{tcc.alunoNome}</b> (Matrícula: {tcc.aluno_id}) • Orientador:{" "}
-              <b className="text-[#111a2e]">{tcc.orientadorNome}</b>
-              {tcc.curso ? <> &bull; {tcc.curso}</> : null}
-            </p>
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#f4f5f7] border border-[#dfe2e8] text-[#111a2e]">
+                <User className="w-3.5 h-3.5 text-[#1e78f0]" />
+                <span className="text-[#6b7385]">Aluno:</span>
+                <strong className="font-semibold">{tcc.alunoNome}</strong>
+                <span className="text-[11px] text-[#6b7385] bg-white px-1.5 py-0.5 rounded border border-[#dfe2e8]">
+                  Matrícula: {tcc.aluno_id}
+                </span>
+              </div>
+
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#f4f5f7] border border-[#dfe2e8] text-[#111a2e]">
+                <GraduationCap className="w-3.5 h-3.5 text-[#1e78f0]" />
+                <span className="text-[#6b7385]">Orientador:</span>
+                <strong className="font-semibold">{tcc.orientadorNome}</strong>
+              </div>
+
+              {tcc.curso && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50/70 border border-blue-100 text-[#1e78f0]">
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span className="font-semibold">{tcc.curso}</span>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="min-w-[210px] space-y-2 bg-[#f4f5f7] p-3.5 rounded-xl border border-[#dfe2e8]">
+          {/* Card de Defesa no canto superior direito */}
+          <div className="w-full sm:w-auto sm:min-w-[210px] space-y-1.5 bg-[#f4f5f7] p-3.5 rounded-xl border border-[#dfe2e8] self-start shrink-0">
             <div className="flex items-center gap-2 text-xs font-bold text-[#111a2e]">
               <CalendarClock className="w-4 h-4 text-[#1e78f0]" />
               <span>Defesa</span>
@@ -269,20 +274,12 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={alternarLeitor}
+                  onClick={abrirEmNovaAba}
                   disabled={carregandoDoc}
                   className="px-4 py-2 bg-[#1e78f0] hover:bg-[#1666d3] disabled:opacity-60 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                 >
-                  {leitorUrl ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  <span>{carregandoDoc ? "Abrindo..." : leitorUrl ? "Fechar leitor" : "Ler aqui"}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={abrirEmNovaAba}
-                  className="px-4 py-2 bg-white hover:bg-[#f4f5f7] border border-[#dfe2e8] text-[#111a2e] text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
                   <Download className="w-4 h-4" />
-                  <span>Nova aba</span>
+                  <span>{carregandoDoc ? "Baixando..." : "Fazer o download"}</span>
                 </button>
               </div>
             </div>
@@ -292,14 +289,6 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{erroDoc}</span>
               </div>
-            )}
-
-            {leitorUrl && (
-              <iframe
-                src={leitorUrl}
-                title={`Leitor de PDF: ${versaoFinal.nomeArquivo}`}
-                className="w-full h-[70vh] min-h-[420px] rounded-lg border border-[#dfe2e8] bg-white"
-              />
             )}
           </>
         ) : (
