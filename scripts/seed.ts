@@ -136,46 +136,282 @@ async function main() {
   for (const a of extras) uidAluno[a.matricula] = await criarUsuario(a.nome, a.email, "ALUNO", a.matricula);
 
   // 2. Tabelas de papel (conforme o ER)
-  await db.collection("coordenadores").doc(claudio).set({ id: claudio, usuario_id: claudio });
-  await db.collection("professores_orientadores").doc(joana).set({ id: joana, usuario_id: joana });
-  await db.collection("professores_orientadores").doc(orient2).set({ id: orient2, usuario_id: orient2 });
-  await db.collection("professores_avaliadores").doc(silvia).set({ id: silvia, usuario_id: silvia });
-  await db.collection("alunos").doc("2026001").set({ matricula: "2026001", usuario_id: jorge });
-  await db.collection("alunos").doc("2026002").set({ matricula: "2026002", usuario_id: maria });
-  await db.collection("professores_avaliadores").doc(roberto).set({ id: roberto, usuario_id: roberto });
-  await db.collection("professores_orientadores").doc(orientMarcos).set({ id: orientMarcos, usuario_id: orientMarcos });
-  for (const a of extras) {
-    await db.collection("alunos").doc(a.matricula).set({ matricula: a.matricula, usuario_id: uidAluno[a.matricula] });
+  await db.collection("coordenadores").doc(claudio).set({
+    id: claudio,
+    usuario_id: claudio,
+    cursos: ["Engenharia de Software", "Sistemas de Informação"],
+  });
+  await db.collection("professores_orientadores").doc(joana).set({
+    id: joana,
+    usuario_id: joana,
+    cursos: ["Engenharia de Software", "Sistemas de Informação"],
+  });
+  await db.collection("professores_orientadores").doc(orient2).set({
+    id: orient2,
+    usuario_id: orient2,
+    cursos: ["Engenharia de Software"],
+  });
+  await db.collection("professores_orientadores").doc(orientMarcos).set({
+    id: orientMarcos,
+    usuario_id: orientMarcos,
+    cursos: ["Engenharia de Software", "Ciência da Computação"],
+  });
+  await db.collection("professores_avaliadores").doc(silvia).set({
+    id: silvia,
+    usuario_id: silvia,
+    cursos: ["Engenharia de Software", "Sistemas de Informação"],
+  });
+  await db.collection("professores_avaliadores").doc(roberto).set({
+    id: roberto,
+    usuario_id: roberto,
+    cursos: ["Engenharia de Software"],
+  });
+
+  await db.collection("alunos").doc("2026001").set({
+    matricula: "2026001",
+    usuario_id: jorge,
+    curso: "Engenharia de Software",
+  });
+  await db.collection("alunos").doc("2026002").set({
+    matricula: "2026002",
+    usuario_id: maria,
+    curso: "Engenharia de Software",
+  });
+
+  const cursosExtras = [
+    "Engenharia de Software",
+    "Engenharia de Software",
+    "Sistemas de Informação",
+    "Sistemas de Informação",
+    "Engenharia de Software",
+  ];
+  for (let idx = 0; idx < extras.length; idx++) {
+    const a = extras[idx];
+    await db.collection("alunos").doc(a.matricula).set({
+      matricula: a.matricula,
+      usuario_id: uidAluno[a.matricula],
+      curso: cursosExtras[idx] ?? "Engenharia de Software",
+    });
   }
 
-  // 3. Cronograma e marcos
+  // 3. Cronograma e marcos com etapas acadêmicas padrão para TCC 1 e TCC 2
   await db.collection("cronogramas").doc("2026-2").set({ id: "2026-2", semestre: "2026.2" });
   const marcos = [
-    { id: "qualificacao", titulo: "Qualificação", dataLimite: "2026-09-15" },
-    { id: "entrega-final", titulo: "Entrega Final", dataLimite: "2026-11-10" },
-    { id: "defesa", titulo: "Defesa", dataLimite: "2026-11-25" },
+    // ── TCC 1: Planejamento / Pré-Projeto ──────────────────────────────
+    {
+      id: "tcc1-tema-orientador",
+      titulo: "Escolha do Tema e do Orientador",
+      dataLimite: "2026-07-20",
+      fase: 1,
+      ordem: 1,
+      tipo: "COMUM",
+      exigeArquivo: true,
+      descricao: "Definição da área de interesse e convite formal ao professor orientador.",
+    },
+    {
+      id: "tcc1-problema",
+      titulo: "Delimitação do Problema de Pesquisa",
+      dataLimite: "2026-08-05",
+      fase: 1,
+      ordem: 2,
+      tipo: "COMUM",
+      exigeArquivo: true,
+      descricao: "Transformar o tema em uma pergunta específica a ser respondida.",
+    },
+    {
+      id: "tcc1-objetivos",
+      titulo: "Construção dos Objetivos (Geral e Específicos)",
+      dataLimite: "2026-08-20",
+      fase: 1,
+      ordem: 3,
+      tipo: "COMUM",
+      exigeArquivo: true,
+      descricao: "Definição do objetivo geral e passos necessários para atingi-lo.",
+    },
+    {
+      id: "tcc1-justificativa",
+      titulo: "Justificativa da Pesquisa",
+      dataLimite: "2026-09-05",
+      fase: 1,
+      ordem: 4,
+      tipo: "COMUM",
+      exigeArquivo: true,
+      descricao: "Explicar a relevância científica, social ou mercadológica do tema.",
+    },
+    {
+      id: "tcc1-fundamentacao-teorica",
+      titulo: "Fundamentação Teórica (Revisão Bibliográfica)",
+      dataLimite: "2026-09-25",
+      fase: 1,
+      ordem: 5,
+      tipo: "COMUM",
+      exigeArquivo: true,
+      descricao: "Levantamento bibliográfico e revisão dos principais autores.",
+    },
+    {
+      id: "tcc1-metodologia",
+      titulo: "Metodologia Proposta",
+      dataLimite: "2026-10-15",
+      fase: 1,
+      ordem: 6,
+      tipo: "COMUM",
+      exigeArquivo: true,
+      descricao: "Planejamento detalhado da coleta e análise futura de dados.",
+    },
+    {
+      id: "tcc1-cronograma-orcamento",
+      titulo: "Cronograma e Orçamento de Execução",
+      dataLimite: "2026-11-05",
+      fase: 1,
+      ordem: 7,
+      tipo: "COMUM",
+      exigeArquivo: true,
+      descricao: "Planejamento de tempo para o TCC 2 e custos estimados.",
+    },
+    {
+      id: "qualificacao",
+      titulo: "Entrega do Projeto e Qualificação do TCC 1",
+      dataLimite: "2026-11-20",
+      fase: 1,
+      ordem: 8,
+      tipo: "COMUM",
+      exigeArquivo: true,
+      descricao: "Apresentação e avaliação do anteprojeto para autorização da fase de execução.",
+    },
+
+    // ── TCC 2: Execução / Trabalho Final ───────────────────────────────
+    {
+      id: "tcc2-ajuste-metodologia",
+      titulo: "Ajuste do TCC 1 e Mudança de Tempo Verbal",
+      dataLimite: "2026-08-01",
+      fase: 2,
+      ordem: 1,
+      tipo: "COMUM",
+      exigeArquivo: true,
+      descricao: "Ajustes com base no feedback da qualificação e transição para o tempo passado.",
+    },
+    {
+      id: "tcc2-coleta-dados",
+      titulo: "Coleta de Dados e Trabalho de Campo",
+      dataLimite: "2026-08-25",
+      fase: 2,
+      ordem: 2,
+      tipo: "COMUM",
+      exigeArquivo: true,
+      descricao: "Execução dos experimentos, questionários ou aprofundamento literário.",
+    },
+    {
+      id: "tcc2-analise-discussao",
+      titulo: "Análise e Discussão dos Resultados",
+      dataLimite: "2026-09-20",
+      fase: 2,
+      ordem: 3,
+      tipo: "COMUM",
+      exigeArquivo: true,
+      descricao: "Cruzamento dos resultados obtidos com o referencial teórico.",
+    },
+    {
+      id: "tcc2-conclusao",
+      titulo: "Considerações Finais e Conclusão",
+      dataLimite: "2026-10-10",
+      fase: 2,
+      ordem: 4,
+      tipo: "COMUM",
+      exigeArquivo: true,
+      descricao: "Síntese dos achados, limitações da pesquisa e recomendações.",
+    },
+    {
+      id: "tcc2-formatacao-abnt",
+      titulo: "Formatação Final e Normas ABNT",
+      dataLimite: "2026-10-30",
+      fase: 2,
+      ordem: 5,
+      tipo: "COMUM",
+      exigeArquivo: true,
+      descricao: "Adequação de referências, citações, sumário e elementos pré/pós-textuais.",
+    },
+    {
+      id: "entrega-final",
+      titulo: "Entrega da Versão de Avaliação à Banca",
+      dataLimite: "2026-11-10",
+      fase: 2,
+      ordem: 6,
+      tipo: "ENTREGA_FINAL",
+      exigeArquivo: true,
+      bloqueioEstrito: true,
+      descricao: "Envio do documento completo aos membros da banca examinadora.",
+    },
+    {
+      id: "defesa",
+      titulo: "Defesa Oral perante a Banca",
+      dataLimite: "2026-11-25",
+      fase: 2,
+      ordem: 7,
+      tipo: "DEFESA",
+      exigeArquivo: false,
+      descricao: "Apresentação dos resultados perante a banca e arguição.",
+    },
+    {
+      id: "tcc2-deposito-final",
+      titulo: "Correções Finais e Depósito Definitivo",
+      dataLimite: "2026-12-05",
+      fase: 2,
+      ordem: 8,
+      tipo: "COMUM",
+      exigeArquivo: true,
+      descricao: "Ajustes solicitados pela banca e entrega da versão definitiva.",
+    },
   ];
+
   for (const m of marcos) {
     await db.collection("marcos_cronograma").doc(m.id).set({
       id: m.id,
       titulo: m.titulo,
       cronograma_id: "2026-2",
+      fase: m.fase,
       dataLimite: Timestamp.fromDate(new Date(m.dataLimite + "T23:59:00-03:00")),
+      ordem: m.ordem,
+      tipo: m.tipo,
+      exigeArquivo: m.exigeArquivo,
+      descricao: m.descricao,
       bloqueioEstrito: m.id === "entrega-final",
+    });
+
+    // Postagem institucional / de orientação inicial do docente no banco
+    const postagemId = `post-${m.id}`;
+    await db.collection("postagens_etapas").doc(postagemId).set({
+      id: postagemId,
+      etapa_id: m.id,
+      autor_id: joana,
+      autorNome: "Prof.ª Joana Jordão",
+      autorPapel: "ORIENTADOR",
+      titulo: `Orientações: ${m.titulo}`,
+      conteudo: m.descricao,
+      dataHora: Timestamp.fromDate(new Date("2026-08-01T10:00:00-03:00")),
+      anexos: [
+        {
+          id: `manual-${m.id}`,
+          nome: `Diretrizes_${m.id}.pdf`,
+          tamanho: "420 KB",
+          tipo: "PDF",
+          url: "#",
+        },
+      ],
     });
   }
 
-  // 4. TCCs: Jorge com Joana (TCC 1 e TCC 2); Maria com o orientador antigo (para testar a troca)
+  // 4. TCCs:
+  // Jorge: Concluiu com sucesso o TCC 1 (100% aprovado no semestre anterior) e está no TCC 2 (~63% de progresso na execução)
   await db.collection("tccs").doc("tcc-jorge").set({
     id: "tcc-jorge",
-    titulo: "Sistema de Gestão de TCC (SGTCC)",
-    statusGeral: "EM_ANDAMENTO",
+    titulo: "Sistema de Gestão de TCC (SGTCC) - Anteprojeto",
+    statusGeral: "APROVADO",
     fase: 1,
     curso: "Engenharia de Software",
     aluno_id: "2026001",
     orientador_id: joana,
     avaliadoresUids: [silvia],
-    defesaEm: emDias(21),
+    defesaEm: emDias(-120),
   });
   await db.collection("tccs").doc("tcc-jorge-2").set({
     id: "tcc-jorge-2",
@@ -185,7 +421,10 @@ async function main() {
     curso: "Engenharia de Software",
     aluno_id: "2026001",
     orientador_id: joana,
+    avaliadoresUids: [silvia],
+    defesaEm: emDias(21),
   });
+  // Maria: Está cursando o TCC 1, em fase inicial (~25% de progresso)
   await db.collection("tccs").doc("tcc-maria").set({
     id: "tcc-maria",
     titulo: "Análise de Dados Acadêmicos",
@@ -196,27 +435,188 @@ async function main() {
     orientador_id: orient2,
   });
 
-  // 5. Entrega com versão e feedback (histórico para testar RN02 / US04)
+  // 5. Entregas e Histórico Real
+  // ── Jorge TCC 1 (Fase 1): 100% CONCLUÍDO (Pré-requisito cumprido para estar no TCC 2)
+  const etapasJorge1 = [
+    { marcoId: "tcc1-tema-orientador", status: "CONCLUIDA", versao: 1, arquivo: "termo_orientacao_assinado.pdf", fb: "Tema e orientação aprovados com sucesso." },
+    { marcoId: "tcc1-problema", status: "CONCLUIDA", versao: 2, arquivo: "problema_pesquisa_v2.pdf", fb: "Excelente recorte do problema de pesquisa." },
+    { marcoId: "tcc1-objetivos", status: "CONCLUIDA", versao: 1, arquivo: "objetivos_geral_especificos.pdf", fb: "Objetivos claros e alcançáveis." },
+    { marcoId: "tcc1-justificativa", status: "CONCLUIDA", versao: 1, arquivo: "justificativa_aprovada.pdf", fb: "Justificativa muito bem fundamentada." },
+    { marcoId: "tcc1-fundamentacao-teorica", status: "CONCLUIDA", versao: 2, arquivo: "revisao_literaria_final.pdf", fb: "Revisão bibliográfica completa com autores recentes." },
+    { marcoId: "tcc1-metodologia", status: "CONCLUIDA", versao: 1, arquivo: "metodologia_proposta.pdf", fb: "Metodologia adequada para o desenvolvimento da ferramenta." },
+    { marcoId: "tcc1-cronograma-orcamento", status: "CONCLUIDA", versao: 1, arquivo: "cronograma_execucao_tcc2.pdf", fb: "Cronograma realista e bem distribuído." },
+    { marcoId: "qualificacao", status: "CONCLUIDA", versao: 1, arquivo: "projeto_completo_qualificacao.pdf", fb: "Projeto aprovado na qualificação com louvor. Liberado para o TCC 2." },
+  ];
+
+  for (let i = 0; i < etapasJorge1.length; i++) {
+    const e = etapasJorge1[i];
+    const entregaId = `entrega-jorge1-${i + 1}`;
+    await db.collection("entregas").doc(entregaId).set({
+      id: entregaId,
+      status: e.status,
+      dataSubmissao: emDias(-180 + i * 8),
+      marco_id: e.marcoId,
+      tcc_id: "tcc-jorge",
+    });
+
+    const versaoId = `v${e.versao}-jorge1-${i + 1}`;
+    await db.collection("versoes_arquivo").doc(versaoId).set({
+      id: versaoId,
+      numeroVersao: e.versao,
+      arquivoUrl: `tccs/tcc-jorge/entregas/${entregaId}/${e.arquivo}`,
+      dataUpload: emDias(-180 + i * 8),
+      entrega_id: entregaId,
+    });
+
+    if (e.fb) {
+      await db.collection("feedbacks").doc(`fb-jorge1-${i + 1}`).set({
+        id: `fb-jorge1-${i + 1}`,
+        comentario: e.fb,
+        data: emDias(-178 + i * 8),
+        entrega_id: entregaId,
+        autor_id: joana,
+      });
+    }
+  }
+
+  // ── Jorge TCC 2 (Fase 2): Em andamento (~38% de conclusão - 3 etapas concluídas, 1 em correção, 1 para correção, restantes pendentes)
+  // Ordem sequencial das 8 etapas do TCC 2:
+  // 1. Ajuste do TCC 1 e Mudança de Tempo Verbal -> CONCLUIDA
+  // 2. Coleta de Dados e Trabalho de Campo       -> CONCLUIDA
+  // 3. Análise e Discussão dos Resultados       -> CONCLUIDA
+  // 4. Considerações Finais e Conclusão         -> SOLICITADA_CORRECAO ("Em correção")
+  // 5. Formatação Final e Normas ABNT           -> PRONTA_PARA_REVISAO ("Para correção")
+  // 6. Entrega da Versão de Avaliação à Banca   -> AGUARDANDO_ENVIO ("Pendente")
+  // 7. Defesa Oral perante a Banca              -> AGUARDANDO_ENVIO ("Pendente")
+  // 8. Correções Finais e Depósito Definitivo   -> AGUARDANDO_ENVIO ("Pendente")
+  const etapasJorge2 = [
+    { marcoId: "tcc2-ajuste-metodologia", status: "CONCLUIDA", versao: 1, arquivo: "metodologia_tempo_passado.pdf", fb: "Adaptação correta do tempo verbal da metodologia." },
+    { marcoId: "tcc2-coleta-dados", status: "CONCLUIDA", versao: 2, arquivo: "coleta_dados_consolidada.pdf", fb: "Resultados da coleta bem tabulados e documentados." },
+    { marcoId: "tcc2-analise-discussao", status: "CONCLUIDA", versao: 1, arquivo: "analise_discussao_resultados.pdf", fb: "Excelente correlação prática com a teoria." },
+    { marcoId: "tcc2-conclusao", status: "SOLICITADA_CORRECAO", versao: 1, arquivo: "consideracoes_finais_v1.pdf", fb: "Aprofunde a discussão das limitações encontradas na pesquisa." },
+    { marcoId: "tcc2-formatacao-abnt", status: "PRONTA_PARA_REVISAO", versao: 1, arquivo: "previa_formatacao_abnt.pdf" },
+  ];
+
+  for (let i = 0; i < etapasJorge2.length; i++) {
+    const e = etapasJorge2[i];
+    const entregaId = `entrega-jorge2-${i + 1}`;
+    await db.collection("entregas").doc(entregaId).set({
+      id: entregaId,
+      status: e.status,
+      dataSubmissao: emDias(-40 + i * 6),
+      marco_id: e.marcoId,
+      tcc_id: "tcc-jorge-2",
+    });
+
+    const versaoId = `v${e.versao}-jorge2-${i + 1}`;
+    await db.collection("versoes_arquivo").doc(versaoId).set({
+      id: versaoId,
+      numeroVersao: e.versao,
+      arquivoUrl: `tccs/tcc-jorge-2/entregas/${entregaId}/${e.arquivo}`,
+      dataUpload: emDias(-40 + i * 6),
+      entrega_id: entregaId,
+    });
+
+    if (e.fb) {
+      await db.collection("feedbacks").doc(`fb-jorge2-${i + 1}`).set({
+        id: `fb-jorge2-${i + 1}`,
+        comentario: e.fb,
+        data: emDias(-38 + i * 6),
+        entrega_id: entregaId,
+        autor_id: joana,
+      });
+    }
+  }
+
+  // ── Maria TCC 1 (Fase 1): ~25% de conclusão (2 etapas concluídas, 1 em correção, 1 em andamento/revisão, restantes pendentes)
+  // Ordem sequencial das 8 etapas do TCC 1:
+  // 1. Escolha do Tema e do Orientador                      -> CONCLUIDA
+  // 2. Delimitação do Problema de Pesquisa                  -> CONCLUIDA
+  // 3. Construção dos Objetivos (Geral e Específicos)       -> SOLICITADA_CORRECAO ("Em correção")
+  // 4. Justificativa da Pesquisa                            -> PRONTA_PARA_REVISAO ("Para correção")
+  // 5. Fundamentação Teórica (Revisão Bibliográfica)        -> AGUARDANDO_ENVIO ("Pendente")
+  // 6. Metodologia Proposta                                 -> AGUARDANDO_ENVIO ("Pendente")
+  // 7. Cronograma e Orçamento de Execução                   -> AGUARDANDO_ENVIO ("Pendente")
+  // 8. Entrega do Projeto e Qualificação do TCC 1          -> AGUARDANDO_ENVIO ("Pendente")
   await db.collection("entregas").doc("entrega-maria-1").set({
     id: "entrega-maria-1",
-    status: "SOLICITADA_CORRECAO",
-    dataSubmissao: Timestamp.now(),
-    marco_id: "qualificacao",
+    status: "CONCLUIDA",
+    dataSubmissao: emDias(-25),
+    marco_id: "tcc1-tema-orientador",
     tcc_id: "tcc-maria",
   });
-  await db.collection("versoes_arquivo").doc("v1-maria").set({
-    id: "v1-maria",
+  await db.collection("versoes_arquivo").doc("v1-maria-1").set({
+    id: "v1-maria-1",
     numeroVersao: 1,
-    arquivoUrl: "tccs/tcc-maria/entregas/entrega-maria-1/v1_capitulo1.pdf",
-    dataUpload: Timestamp.now(),
+    arquivoUrl: "tccs/tcc-maria/entregas/entrega-maria-1/definicao_tema.pdf",
+    dataUpload: emDias(-25),
     entrega_id: "entrega-maria-1",
   });
   await db.collection("feedbacks").doc("fb-maria-1").set({
     id: "fb-maria-1",
-    comentario: "Reveja a introdução.",
-    data: Timestamp.now(),
+    comentario: "Tema sobre análise de dados acadêmicos aprovado.",
+    data: emDias(-24),
     entrega_id: "entrega-maria-1",
     autor_id: orient2,
+  });
+
+  await db.collection("entregas").doc("entrega-maria-2").set({
+    id: "entrega-maria-2",
+    status: "CONCLUIDA",
+    dataSubmissao: emDias(-15),
+    marco_id: "tcc1-problema",
+    tcc_id: "tcc-maria",
+  });
+  await db.collection("versoes_arquivo").doc("v1-maria-2").set({
+    id: "v1-maria-2",
+    numeroVersao: 1,
+    arquivoUrl: "tccs/tcc-maria/entregas/entrega-maria-2/problema_pesquisa.pdf",
+    dataUpload: emDias(-15),
+    entrega_id: "entrega-maria-2",
+  });
+  await db.collection("feedbacks").doc("fb-maria-2").set({
+    id: "fb-maria-2",
+    comentario: "Pergunta de pesquisa refinada e aprovada.",
+    data: emDias(-14),
+    entrega_id: "entrega-maria-2",
+    autor_id: orient2,
+  });
+
+  await db.collection("entregas").doc("entrega-maria-3").set({
+    id: "entrega-maria-3",
+    status: "SOLICITADA_CORRECAO",
+    dataSubmissao: emDias(-5),
+    marco_id: "tcc1-objetivos",
+    tcc_id: "tcc-maria",
+  });
+  await db.collection("versoes_arquivo").doc("v1-maria-3").set({
+    id: "v1-maria-3",
+    numeroVersao: 1,
+    arquivoUrl: "tccs/tcc-maria/entregas/entrega-maria-3/objetivos_v1.pdf",
+    dataUpload: emDias(-5),
+    entrega_id: "entrega-maria-3",
+  });
+  await db.collection("feedbacks").doc("fb-maria-3").set({
+    id: "fb-maria-3",
+    comentario: "Separe com clareza o objetivo geral dos objetivos específicos.",
+    data: emDias(-3),
+    entrega_id: "entrega-maria-3",
+    autor_id: orient2,
+  });
+
+  await db.collection("entregas").doc("entrega-maria-4").set({
+    id: "entrega-maria-4",
+    status: "PRONTA_PARA_REVISAO",
+    dataSubmissao: Timestamp.now(),
+    marco_id: "tcc1-justificativa",
+    tcc_id: "tcc-maria",
+  });
+  await db.collection("versoes_arquivo").doc("v1-maria-4").set({
+    id: "v1-maria-4",
+    numeroVersao: 1,
+    arquivoUrl: "tccs/tcc-maria/entregas/entrega-maria-4/justificativa_previa.pdf",
+    dataUpload: Timestamp.now(),
+    entrega_id: "entrega-maria-4",
   });
 
   // 6. Banca do TCC do Jorge
@@ -364,22 +764,48 @@ async function main() {
       }
     }
 
-    // Qualificação concluída (histórico) + entrega final concluída pelo orientador (RN05)
-    const qId = `entrega-qualificacao-${t.chave}`;
-    await db.collection("entregas").doc(qId).set({
-      id: qId,
-      status: "CONCLUIDA",
-      dataSubmissao: emDias(-60),
-      marco_id: "qualificacao",
-      tcc_id: tccId,
-    });
-    await db.collection("versoes_arquivo").doc(`v1-qualificacao-${t.chave}`).set({
-      id: `v1-qualificacao-${t.chave}`,
-      numeroVersao: 1,
-      arquivoUrl: `tccs/${tccId}/entregas/${qId}/v1_qualificacao.pdf`,
-      dataUpload: emDias(-62),
-      entrega_id: qId,
-    });
+    // Marcos de progresso para os TCCs de demonstração
+    if (t.fase === 1) {
+      // TCC 1: Qualificação e etapas intermediárias
+      const marcosTcc1Concluidos = ["tcc1-tema-orientador", "tcc1-problema", "tcc1-objetivos", "qualificacao"];
+      for (const mId of marcosTcc1Concluidos) {
+        const entId = `entrega-${mId}-${t.chave}`;
+        await db.collection("entregas").doc(entId).set({
+          id: entId,
+          status: "CONCLUIDA",
+          dataSubmissao: emDias(-40),
+          marco_id: mId,
+          tcc_id: tccId,
+        });
+        await db.collection("versoes_arquivo").doc(`v1-${mId}-${t.chave}`).set({
+          id: `v1-${mId}-${t.chave}`,
+          numeroVersao: 1,
+          arquivoUrl: `tccs/${tccId}/entregas/${entId}/v1_${mId}.pdf`,
+          dataUpload: emDias(-40),
+          entrega_id: entId,
+        });
+      }
+    } else {
+      // TCC 2: Marcos de execução
+      const marcosTcc2Concluidos = ["tcc2-ajuste-metodologia", "tcc2-coleta-dados", "tcc2-analise-discussao"];
+      for (const mId of marcosTcc2Concluidos) {
+        const entId = `entrega-${mId}-${t.chave}`;
+        await db.collection("entregas").doc(entId).set({
+          id: entId,
+          status: "CONCLUIDA",
+          dataSubmissao: emDias(-50),
+          marco_id: mId,
+          tcc_id: tccId,
+        });
+        await db.collection("versoes_arquivo").doc(`v1-${mId}-${t.chave}`).set({
+          id: `v1-${mId}-${t.chave}`,
+          numeroVersao: 1,
+          arquivoUrl: `tccs/${tccId}/entregas/${entId}/v1_${mId}.pdf`,
+          dataUpload: emDias(-50),
+          entrega_id: entId,
+        });
+      }
+    }
 
     if (t.versaoFinal) {
       const fId = `entrega-final-${t.chave}`;

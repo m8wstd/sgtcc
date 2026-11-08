@@ -3,7 +3,6 @@
 import React from "react";
 import type { TccResumo, PainelTcc, ItemMarco } from "@/lib/data/queries";
 import { PainelTccModular } from "@/components/tcc-view/painel-tcc-modular";
-import { SALAS_ETAPAS_MOCK } from "./dados-etapas";
 
 interface AlunoDashboardClientProps {
   nomeAluno: string;
@@ -20,54 +19,19 @@ export function AlunoDashboardClient({
 }: AlunoDashboardClientProps) {
   const tccPrincipal = tccs.find((t) => t.id === tccIdAtivo) ?? tccs[0] ?? null;
 
-  // Mock fidedigno das etapas do aluno com dados fictícios do protótipo
-  const itensMock: ItemMarco[] = SALAS_ETAPAS_MOCK.map((etapa, idx) => {
-    let statusEfetivo: "CONCLUIDA" | "PRONTA_PARA_REVISAO" | "EM_REVISAO" | "SOLICITADA_CORRECAO" | "AGUARDANDO_ENVIO" = "AGUARDANDO_ENVIO";
-    if (etapa.statusKanban === "Concluído") statusEfetivo = "CONCLUIDA";
-    else if (etapa.statusKanban === "Em andamento") statusEfetivo = "PRONTA_PARA_REVISAO";
-    else if (etapa.statusKanban === "Para correção") statusEfetivo = "EM_REVISAO";
-    else if (etapa.statusKanban === "Em correção") statusEfetivo = "SOLICITADA_CORRECAO";
-
-    return {
-      marco: {
-        id: `marco-${idx + 1}`,
-        titulo: etapa.titulo,
-        dataLimite: new Date(
-          etapa.dataEntrega.split("/").reverse().join("-") + "T23:59:00.000Z"
-        ),
-        cronograma_id: "cronograma-padrao",
-      },
-      entrega: null,
-      statusEfetivo,
-      versoes: [],
-      feedbacks: etapa.comentarioOrientadora
-        ? [
-            {
-              id: `fb-${idx + 1}`,
-              entrega_id: `ent-${idx + 1}`,
-              autor_id: "orientador-padrao",
-              autorNome: "Prof.ª Joana Jordão",
-              comentario: etapa.comentarioOrientadora,
-              data: new Date("2026-10-20T14:30:00.000Z"),
-            },
-          ]
-        : [],
-    };
-  });
-
-  // Prioriza as etapas ricas fictícias do frontend
-  const itens: ItemMarco[] = itensMock;
+  // Itens reais do banco de dados (vindos de getPainelTcc)
+  const itens: ItemMarco[] = detalhesPrincipal?.itens ?? [];
 
   const tccMock: TccResumo = tccPrincipal ?? {
     id: "tcc-principal",
-    titulo: "Inteligência Artificial Aplicada à Educação",
-    aluno_id: "123456",
-    orientador_id: "prof-1",
+    titulo: "Trabalho de Conclusão de Curso",
+    aluno_id: "aluno",
+    orientador_id: "orientador",
     statusGeral: "EM_ANDAMENTO",
     alunoNome: nomeAluno,
-    orientadorNome: "Prof.ª Joana Jordão",
+    orientadorNome: "Orientador",
     fase: 1,
-    curso: "Engenharia de Software",
+    curso: "Graduação",
   };
 
   return (

@@ -38,18 +38,21 @@ export interface Usuario {
 export interface Aluno {
   matricula: string;
   usuario_id: string;
+  curso?: string;
   usuario?: Usuario;
 }
 
 export interface ProfessorOrientador {
   id: string;
   usuario_id: string;
+  cursos?: string[];
   usuario?: Usuario;
 }
 
 export interface ProfessorAvaliador {
   id: string;
   usuario_id: string;
+  cursos?: string[];
   usuario?: Usuario;
 }
 
@@ -78,11 +81,43 @@ export interface Cronograma {
   semestre: string; // ex: "2026/2"
 }
 
+export type TipoEtapa = "COMUM" | "ENTREGA_FINAL" | "DEFESA";
+
+export interface MaterialApoio {
+  id: string;
+  nome: string;
+  tamanho?: string;
+  tipo?: string;
+  url: string;
+  criadoEm?: Date | string;
+}
+
+export interface PostagemEtapa {
+  id: string;
+  etapa_id: string; // marco_id
+  tcc_id?: string; // opcional se for postagem geral do curso ou específica de um TCC
+  autor_id: string;
+  autorNome: string;
+  autorPapel: "ORIENTADOR" | "COORDENACAO";
+  titulo: string;
+  conteudo: string;
+  dataHora: Date | string;
+  anexos?: MaterialApoio[];
+}
+
 export interface MarcoCronograma {
   id: string;
   titulo: string;
   dataLimite: Date | string;
   cronograma_id: string;
+  fase?: 1 | 2; // TCC 1 ou TCC 2
+  ordem?: number;
+  tipo?: TipoEtapa;
+  descricao?: string;
+  instrucoes?: string;
+  exigeArquivo?: boolean;
+  materiaisApoio?: MaterialApoio[];
+  postagens?: PostagemEtapa[];
 }
 
 export interface Entrega {

@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { requireSessao } from "@/lib/auth/server-session";
-import { listarTccsVisiveis, getPainelTcc } from "@/lib/data/queries";
+import { listarTccsVisiveis, getPainelTcc, resolverTccAtivoPadrao } from "@/lib/data/queries";
 import { PerfilEnum } from "@/types";
 import { AlunoDashboardClient } from "./aluno-dashboard-client";
 
@@ -15,9 +15,10 @@ async function ConteudoAluno({ searchParams }: AlunoPageProps) {
   const sessao = await requireSessao(PerfilEnum.ALUNO);
   const tccs = await listarTccsVisiveis(sessao);
   const params = await searchParams;
+  const tccPadrao = resolverTccAtivoPadrao(tccs);
   const tccIdSelecionado = params?.tcc && tccs.some((t) => t.id === params.tcc)
     ? params.tcc
-    : (tccs[0]?.id ?? null);
+    : (tccPadrao?.id ?? null);
 
   const detalhesPrincipal = tccIdSelecionado ? await getPainelTcc(sessao, tccIdSelecionado) : null;
 
@@ -31,9 +32,12 @@ async function ConteudoAluno({ searchParams }: AlunoPageProps) {
   );
 }
 
-export default function AlunoDashboardPage(props: AlunoPageProps) {
+export default async function AlunoDashboardPage(props: AlunoPageProps) {
+  const params = await props.searchParams;
+  const key = params?.tcc ?? "default";
+
   return (
-    <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-[#f4f5f7]" />}>
+    <Suspense key={key} fallback={<div className="h-64 animate-pulse rounded-xl bg-[#f4f5f7]" />}>
       <ConteudoAluno searchParams={props.searchParams} />
     </Suspense>
   );
