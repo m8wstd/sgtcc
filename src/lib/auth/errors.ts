@@ -28,9 +28,21 @@ export class UnauthorizedError extends AuthHttpError {
 }
 
 export class ForbiddenError extends AuthHttpError {
-  constructor(message = "Usuário sem permissão para este recurso.") {
-    super(403, "FORBIDDEN", message);
+  constructor(
+    message = "Usuário sem permissão para este recurso.",
+    code: AuthErrorCode = "FORBIDDEN",
+  ) {
+    super(403, code, message);
     this.name = "ForbiddenError";
+  }
+}
+
+export class ProfileNotFoundError extends ForbiddenError {
+  constructor(
+    message = "Usuário autenticado sem perfil institucional cadastrado. Solicite acesso à administração.",
+  ) {
+    super(message, "PROFILE_NOT_FOUND");
+    this.name = "ProfileNotFoundError";
   }
 }
 

@@ -61,5 +61,12 @@ if (!getApps().length) {
 
 export const adminAuth: Auth | null = adminApp ? getAuth(adminApp) : null;
 export const adminDb: Firestore | null = adminApp ? getFirestore(adminApp) : null;
+if (adminDb) {
+  try {
+    adminDb.settings({ ignoreUndefinedProperties: true });
+  } catch {
+    // Configuração pode já ter sido inicializada
+  }
+}
 export const adminStorage: Storage | null = adminApp ? getStorage(adminApp) : null;
 export { adminApp };
