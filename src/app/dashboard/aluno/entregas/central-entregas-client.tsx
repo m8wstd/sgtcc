@@ -8,6 +8,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { ROTULO_STATUS_ENTREGA, formatarData, formatarDataHora } from "@/components/layout/status";
 import type { MarcoEntregaView, VersaoView } from "@/lib/entregas/central";
 import { ACCEPT_UPLOAD, validarMetadadosArquivo } from "@/lib/entregas/regras";
+import { enviarArquivoTcc, verificarDocumento } from "@/lib/entregas/cliente-upload";
 
 interface TccOpcao {
   id: string;
@@ -19,19 +20,6 @@ interface CentralEntregasClientProps {
   tccs: TccOpcao[];
   tccIdAtivo: string | null;
   marcos: MarcoEntregaView[];
-}
-
-async function obterTokenCsrf(): Promise<string> {
-  const res = await fetch("/api/auth/csrf", { credentials: "same-origin" });
-  return ((await res.json()) as { csrfToken: string }).csrfToken;
-}
-
-/** URL assinada (5 min); a API valida o vínculo do usuário com o TCC. */
-async function abrirVersao(versaoId: string): Promise<void> {
-  const res = await fetch(`/api/documentos/${versaoId}`, { credentials: "same-origin" });
-  const corpo = (await res.json()) as { document?: { url: string }; message?: string };
-  if (!res.ok || !corpo.document) throw new Error(corpo.message ?? "Não foi possível abrir o documento.");
-  window.open(corpo.document.url, "_blank", "noopener,noreferrer");
 }
 
 function CartaoMarco({ tccId, marco }: { tccId: string; marco: MarcoEntregaView }) {
@@ -65,24 +53,9 @@ function CartaoMarco({ tccId, marco }: { tccId: string; marco: MarcoEntregaView 
     setErro(null);
     setSucesso(null);
     try {
-      const form = new FormData();
-      form.set("marcoId", marco.marcoId);
-      form.set("arquivo", arquivo);
-      // Sem Content-Type manual: o navegador define o boundary do multipart.
-      const res = await fetch(`/api/tcc/${tccId}/entregas`, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "X-CSRF-Token": await obterTokenCsrf() },
-        body: form,
-      });
-      const corpo = (await res.json()) as {
-        versao?: { numeroVersao: number };
-        emAtraso?: boolean;
-        message?: string;
-      };
-      if (!res.ok || !corpo.versao) throw new Error(corpo.message ?? "Não foi possível enviar o arquivo.");
+      const versao = await enviarArquivoTcc(tccId, marco.marcoId, arquivo);
       setSucesso(
-        `Versão ${corpo.versao.numeroVersao} enviada com sucesso.${corpo.emAtraso ? " Atenção: o envio foi registrado após o prazo." : ""}`,
+        `Versão ${versao.numeroVersao} enviada com sucesso.${marco.emAtraso ? " Atenção: envio após o prazo." : ""}`,
       );
       setArquivo(null);
       if (inputRef.current) inputRef.current.value = "";
@@ -97,9 +70,13 @@ function CartaoMarco({ tccId, marco }: { tccId: string; marco: MarcoEntregaView 
   const [erroAbrir, setErroAbrir] = useState<string | null>(null);
   async function abrir(v: VersaoView) {
     setErroAbrir(null);
+    const aba = window.open("about:blank", "_blank");
     try {
-      await abrirVersao(v.id);
+      const url = await verificarDocumento(v.id);
+      if (aba) aba.location.href = url;
+      else window.location.href = url;
     } catch (err) {
+      aba?.close();
       setErroAbrir(err instanceof Error ? err.message : "Erro ao abrir o documento.");
     }
   }
@@ -203,6 +180,7 @@ function CartaoMarco({ tccId, marco }: { tccId: string; marco: MarcoEntregaView 
                 >
                   Abrir <ExternalLink className="w-3.5 h-3.5" />
                 </button>
+                <a href={`/api/documentos/${encodeURIComponent(v.id)}?download=1`} className="text-[#1e78f0] hover:underline font-semibold shrink-0">Baixar</a>
               </li>
             ))}
           </ul>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -114,6 +114,7 @@ export function PainelTccModular({
 
   // Estado dinâmico de etapas
   const [itens, setItens] = useState<ItemMarco[]>(itensIniciais);
+  useEffect(() => setItens(itensIniciais), [itensIniciais]);
   const [mostrarCriarEtapa, setMostrarCriarEtapa] = useState(false);
   const [novoTituloEtapa, setNovoTituloEtapa] = useState("");
   const [novaDataLimite, setNovaDataLimite] = useState("30/11/2026");
@@ -479,10 +480,10 @@ export function PainelTccModular({
                   ) : (
                     blocosDaColuna.map((item) => {
                       const idx = itens.indexOf(item);
-                      const slug = slugDoMarco(item.marco.titulo, idx);
+                      const slug = encodeURIComponent(item.marco.id);
                       const etapaHref = isOrientador
                         ? `/dashboard/tcc/${tcc.id}/etapa/${slug}`
-                        : `/dashboard/aluno/etapa/${slug}`;
+                        : `/dashboard/aluno/etapa/${slug}?tcc=${encodeURIComponent(tcc.id)}`;
                       const atrasado = item.statusEfetivo === "ATRASADA";
                       const ultimoFeedback = item.feedbacks[0]?.comentario ?? null;
 
@@ -558,10 +559,10 @@ export function PainelTccModular({
           {itens.map(({ marco, entrega, statusEfetivo, versoes, feedbacks }, idx) => {
             const statusLabel = ROTULO_STATUS_ENTREGA[statusEfetivo] ?? statusEfetivo;
             const isConcluido = statusEfetivo === "CONCLUIDA";
-            const slug = slugDoMarco(marco.titulo, idx);
+            const slug = encodeURIComponent(marco.id);
             const etapaHref = isOrientador
               ? `/dashboard/tcc/${tcc.id}/etapa/${slug}`
-              : `/dashboard/aluno/etapa/${slug}`;
+              : `/dashboard/aluno/etapa/${slug}?tcc=${encodeURIComponent(tcc.id)}`;
 
             return (
               <div
@@ -626,16 +627,17 @@ export function PainelTccModular({
                               <div className="truncate">
                                 <span className="text-xs font-semibold text-[#111a2e]">
                                   Versão {v.numeroVersao} &bull;{" "}
-                                  {v.arquivoUrl.split("/").pop()}
+                                  {decodeURIComponent(v.arquivoUrl.split("/").pop() ?? "arquivo").replace(/^v\d+_/, "")}
                                 </span>
                                 <span className="block text-[11px] text-[#6b7385]">
                                   Enviado em {formatarDataHora(v.dataUpload)}
                                 </span>
                               </div>
                             </div>
-                            <span className="text-xs font-medium text-[#1e78f0] hover:underline cursor-pointer">
-                              Visualizar
-                            </span>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <a href={`/api/documentos/${encodeURIComponent(v.id)}`} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-[#1e78f0] hover:underline">Visualizar</a>
+                              <a href={`/api/documentos/${encodeURIComponent(v.id)}?download=1`} className="text-xs font-medium text-[#1e78f0] hover:underline">Baixar</a>
+                            </div>
                           </li>
                         ))}
                       </ul>

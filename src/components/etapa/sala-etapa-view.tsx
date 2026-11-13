@@ -1,6 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { enviarArquivoTcc } from "@/lib/entregas/cliente-upload";
+import { validarMetadadosArquivo } from "@/lib/entregas/regras";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -38,6 +41,9 @@ interface SalaEtapaViewProps {
   voltarLabel?: string;
   tccTitulo?: string;
   alunoNome?: string;
+  tccId: string;
+  marcoId: string;
+  podeEnviar: boolean;
 }
 
 export function SalaEtapaView({
@@ -48,7 +54,11 @@ export function SalaEtapaView({
   voltarLabel,
   tccTitulo,
   alunoNome,
+  tccId,
+  marcoId,
+  podeEnviar,
 }: SalaEtapaViewProps) {
+  const router = useRouter();
   const isOrientador = papelUsuario === "orientador";
   const [tabAtiva, setTabAtiva] = useState<"mural" | "materiais" | "envio" | "historico">("mural");
 
@@ -83,7 +93,10 @@ export function SalaEtapaView({
   // Submissão de Trabalho pelo Aluno
   const [arquivoUpload, setArquivoUpload] = useState<File | null>(null);
   const [uploadSucesso, setUploadSucesso] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [erroUpload, setErroUpload] = useState<string | null>(null);
   const [historico, setHistorico] = useState<HistoricoEnvioAluno[]>(etapaInicial.historicoEnvios);
+  useEffect(() => { setHistorico(etapaInicial.historicoEnvios); }, [etapaInicial.historicoEnvios]);
 
   // Parecer do Orientador
   const [parecerOrientador, setParecerOrientador] = useState("");
@@ -138,27 +151,24 @@ export function SalaEtapaView({
     setMateriais(materiais.filter((m) => m.id !== id));
   };
 
-  // Ação de envio do aluno: faz a etapa ir direto para "Para correção"
-  const handleEnviarTrabalho = (e: React.FormEvent) => {
+  // Envio real: Blob -> confirmação no Firestore -> atualização da sala.
+  const handleEnviarTrabalho = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!arquivoUpload) return;
-
-    const novaVersao: HistoricoEnvioAluno = {
-      versao: historico.length + 1,
-      arquivoNome: arquivoUpload.name,
-      data:
-        new Date().toLocaleDateString("pt-BR") +
-        " " +
-        new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-      status: "Para correção",
-    };
-
-    setHistorico([novaVersao, ...historico]);
-    setStatusKanban("Para correção"); // Vai direto para "Para correção" do orientador
-    setUploadSucesso(true);
-    setArquivoUpload(null);
-    setTabAtiva("historico");
-    setTimeout(() => setUploadSucesso(false), 5000);
+    if (!arquivoUpload || !podeEnviar || enviando) return;
+    setErroUpload(null);
+    setUploadSucesso(false);
+    setEnviando(true);
+    try {
+      await enviarArquivoTcc(tccId, marcoId, arquivoUpload);
+      setArquivoUpload(null);
+      setUploadSucesso(true);
+      setTabAtiva("historico");
+      router.refresh();
+    } catch (erro) {
+      setErroUpload(erro instanceof Error ? erro.message : "O arquivo não foi salvo. Tente novamente.");
+    } finally {
+      setEnviando(false);
+    }
   };
 
   // Ação de criar nova postagem pelo Orientador
@@ -790,17 +800,28 @@ export function SalaEtapaView({
           {uploadSucesso && (
             <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center gap-2.5">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>Arquivo submetido com sucesso! A etapa foi enviada direto para &quot;Para correção&quot; do orientador.</span>
+              <span>Arquivo salvo no Vercel Blob e registrado no histórico de versões.</span>
             </div>
           )}
 
+          {erroUpload && <p role="alert" className="p-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs">{erroUpload}</p>}
+          {!podeEnviar && <p className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-xs">Esta etapa não permite novos envios no momento.</p>}
           <form onSubmit={handleEnviarTrabalho} className="space-y-4">
             <div className="border-2 border-dashed border-[#dfe2e8] hover:border-[#1e78f0] rounded-xl p-10 text-center bg-[#fafbfc] transition-colors">
               <input
                 type="file"
                 id="upload-arquivo-sala"
                 accept=".pdf,.docx"
-                onChange={(e) => setArquivoUpload(e.target.files?.[0] || null)}
+                disabled={!podeEnviar || enviando}
+                onChange={(e) => {
+                  setErroUpload(null);
+                  const selecionado = e.target.files?.[0] ?? null;
+                  if (selecionado) {
+                    const validacao = validarMetadadosArquivo(selecionado.name, selecionado.size);
+                    if (!validacao.ok) { setErroUpload(validacao.mensagem); e.target.value = ""; setArquivoUpload(null); return; }
+                  }
+                  setArquivoUpload(selecionado);
+                }}
                 className="hidden"
               />
               <label htmlFor="upload-arquivo-sala" className="cursor-pointer block space-y-2.5">
@@ -821,10 +842,11 @@ export function SalaEtapaView({
                 </span>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors shadow-xs cursor-pointer justify-center"
+                  disabled={enviando || !podeEnviar}
+                  className="px-5 py-2.5 disabled:opacity-50 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors shadow-xs cursor-pointer justify-center"
                 >
                   <Send className="w-4 h-4" />
-                  <span>Enviar para Correção do Orientador</span>
+                  <span>{enviando ? "Enviando e salvando..." : "Enviar para Correção do Orientador"}</span>
                 </button>
               </div>
             )}
@@ -904,13 +926,14 @@ export function SalaEtapaView({
                     )}
                   </div>
                   <div className="shrink-0 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => alert(`Baixando versão: ${envio.arquivoNome}`)}
-                      className="px-2.5 py-1 text-xs font-semibold text-[#1e78f0] bg-white border border-[#dfe2e8] hover:bg-blue-50 rounded-md cursor-pointer"
-                    >
-                      Baixar Arquivo
-                    </button>
+                    {envio.id && (
+                      <>
+                        <a href={`/api/documentos/${encodeURIComponent(envio.id)}`} target="_blank" rel="noopener noreferrer"
+                          className="px-2.5 py-1 text-xs font-semibold text-[#1e78f0] bg-white border border-[#dfe2e8] hover:bg-blue-50 rounded-md">Ler aqui</a>
+                        <a href={`/api/documentos/${encodeURIComponent(envio.id)}?download=1`}
+                          className="px-2.5 py-1 text-xs font-semibold text-[#1e78f0] bg-white border border-[#dfe2e8] hover:bg-blue-50 rounded-md">Baixar Arquivo</a>
+                      </>
+                    )}
                     <StatusPill status={envio.status} />
                   </div>
                 </div>

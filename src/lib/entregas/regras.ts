@@ -96,14 +96,15 @@ export function caminhoStorage(
 /** Nome para exibição a partir do caminho: remove diretórios e o prefixo "v<n>_". */
 export function nomeExibicaoDoArquivo(caminho: string): string {
   const nome = decodeURIComponent(caminho.split("/").pop() ?? caminho);
-  return nome.replace(/^v\d+_/, "");
+  return nome.replace(/^v\d+_/, "").replace(/^[a-f0-9-]{36}_/i, "");
 }
 
 export type PermissaoEnvio =
   | { ok: true; emAtraso: boolean }
   | { ok: false; status: 403 | 409; codigo: "DEADLINE_PASSED" | "DELIVERY_CLOSED"; motivo: string };
 
-const tempo = (v: Date | string) => new Date(v).getTime();
+const tempo = (v: Date | string | { toDate(): Date }) =>
+  v instanceof Date ? v.getTime() : typeof v === "string" ? new Date(v).getTime() : v.toDate().getTime();
 
 /**
  * Decide se o aluno pode enviar uma nova versão para o marco.

@@ -27,6 +27,7 @@ import {
 } from "@/lib/banca/status";
 import type { SalaBanca } from "@/lib/data/queries";
 import type { Avaliacao, DecisaoBanca } from "@/types";
+import { enviarArquivoTcc, verificarDocumento } from "@/lib/entregas/cliente-upload";
 
 export type PapelBanca = "aluno" | "avaliador" | "orientador" | "gestao";
 
@@ -41,12 +42,9 @@ async function tokenCsrf(): Promise<string> {
   return ((await res.json()) as { csrfToken: string }).csrfToken;
 }
 
-/** URL assinada (5 min) do PDF; a API valida o vínculo do usuário com o TCC. */
+/** Retorna rota local protegida: jamais expõe o endereço privado do Blob. */
 async function urlDoDocumento(documentId: string): Promise<string> {
-  const res = await fetch(`/api/documentos/${documentId}`, { credentials: "same-origin" });
-  const corpo = (await res.json()) as { document?: { url: string }; message?: string };
-  if (!res.ok || !corpo.document) throw new Error(corpo.message ?? "Não foi possível abrir o documento.");
-  return corpo.document.url;
+  return verificarDocumento(documentId);
 }
 
 export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewProps) {
@@ -81,9 +79,18 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
   async function abrirEmNovaAba() {
     if (!versaoFinal) return;
     setErroDoc(null);
+    // Abrir no clique evita bloqueio de pop-ups após uma operação assíncrona.
+    const novaAba = window.open("about:blank", "_blank");
     try {
-      window.open(await urlDoDocumento(versaoFinal.id), "_blank", "noopener,noreferrer");
+      const url = await urlDoDocumento(versaoFinal.id);
+      if (novaAba) {
+        novaAba.opener = null;
+        novaAba.location.href = url;
+      } else {
+        window.location.href = url;
+      }
     } catch (e) {
+      novaAba?.close();
       setErroDoc(e instanceof Error ? e.message : "Erro ao abrir o documento.");
     }
   }
@@ -128,19 +135,28 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
     }
   }
 
-  // ----- Aluno: envio à banca (ainda simulado; ver TODO) -----
+  // ----- Aluno: envio real da monografia, pelo marco entrega-final -----
   const [arquivoUpload, setArquivoUpload] = useState<File | null>(null);
   const [envioSucesso, setEnvioSucesso] = useState(false);
+  const [erroEnvio, setErroEnvio] = useState<string | null>(null);
+  const [enviandoFinal, setEnviandoFinal] = useState(false);
 
-  const handleEnviarParaBanca = (e: React.FormEvent) => {
+  async function dispararParaBanca(e: React.FormEvent) {
     e.preventDefault();
     if (!arquivoUpload) return;
-    // TODO: upload real (Storage + nova versão em `versoes_arquivo` no marco "entrega-final").
-    // Hoje só simula o aviso de sucesso; o documento exibido abaixo vem sempre do banco.
-    setArquivoUpload(null);
-    setEnvioSucesso(true);
-    setTimeout(() => setEnvioSucesso(false), 5000);
-  };
+    setEnviandoFinal(true);
+    setErroEnvio(null);
+    try {
+      await enviarArquivoTcc(tcc.id, "entrega-final", arquivoUpload);
+      setEnvioSucesso(true);
+      setArquivoUpload(null);
+      router.refresh();
+    } catch (error) {
+      setErroEnvio(error instanceof Error ? error.message : "Falha ao salvar o arquivo final.");
+    } finally {
+      setEnviandoFinal(false);
+    }
+  }
 
   const cabecalhoStatus = isAvaliador ? ROTULO_ETAPA_BANCA[etapa] : versaoFinal ? "Aguardando banca" : "Aguardando envio";
 
@@ -198,14 +214,15 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
             </p>
           </div>
 
+          {erroEnvio && <p role="alert" className="text-xs text-red-700">{erroEnvio}</p>}
           {envioSucesso && (
             <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>Projeto final enviado à banca avaliadora com sucesso!</span>
+              <span>Versão final salva e registrada. A aprovação e o encaminhamento à banca são etapas próprias da RF04/RF06.</span>
             </div>
           )}
 
-          <form onSubmit={handleEnviarParaBanca} className="space-y-4">
+          <form onSubmit={dispararParaBanca} className="space-y-4">
             <div className="border-2 border-dashed border-[#dfe2e8] hover:border-[#1e78f0] rounded-xl p-8 text-center bg-[#fafbfc] transition-colors">
               <input
                 type="file"
@@ -226,10 +243,11 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
               <div className="flex justify-end">
                 <button
                   type="submit"
+                  disabled={enviandoFinal}
                   className="px-5 py-2.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors shadow-xs cursor-pointer"
                 >
                   <Send className="w-4 h-4" />
-                  <span>Disparar para a Banca Avaliadora</span>
+                  <span>{enviandoFinal ? "Salvando..." : "Enviar versão final"}</span>
                 </button>
               </div>
             )}
@@ -284,6 +302,9 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
                   <Download className="w-4 h-4" />
                   <span>Nova aba</span>
                 </button>
+                <a href={`/api/documentos/${encodeURIComponent(versaoFinal.id)}?download=1`} className="px-4 py-2 bg-white hover:bg-[#f4f5f7] border border-[#dfe2e8] text-[#111a2e] text-xs font-bold rounded-lg inline-flex items-center gap-1.5">
+                  <Download className="w-4 h-4" /> Baixar
+                </a>
               </div>
             </div>
 

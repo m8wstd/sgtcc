@@ -193,7 +193,7 @@ async function salvarVercelBlob(
 
     // Faz o upload direto para o Vercel Blob com sufixo aleatório (Garante a privacidade)
     const blob = await put(caminhoBase, arquivo.bytes, {
-      access: 'public',
+      access: process.env.BLOB_ACCESS === "private" ? "private" : "public",
       addRandomSuffix: true,
       contentType: arquivo.contentType
     });
