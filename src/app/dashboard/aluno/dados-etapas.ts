@@ -17,6 +17,7 @@ export interface PostagemSala {
 }
 
 export interface HistoricoEnvioAluno {
+  id?: string; // ID da versão no Firestore; versões de demonstração não possuem arquivo baixável
   versao: number;
   arquivoNome: string;
   data: string;
@@ -66,6 +67,8 @@ export interface SalaEtapaTcc {
   progresso: number;
   dataEntrega: string;
   statusKanban: ColunaKanbanKey;
+  statusEfetivo?: string;
+  entregaId?: string;
   comentarioOrientadora: string;
   descricaoInstrucoes: string;
   postagensProfessor: PostagemSala[];

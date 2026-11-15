@@ -149,3 +149,101 @@ export async function PUT(request: Request) {
     );
   }
 }
+
+export async function DELETE(request: Request) {
+  const sessao = await requireSessao(PerfilEnum.ADMIN);
+  if (!sessao) {
+    return NextResponse.json({ error: "UNAUTHORIZED", message: "Acesso negado." }, { status: 403 });
+  }
+
+  if (!adminAuth || !adminDb) {
+    return NextResponse.json(
+      { error: "CONFIG_ERROR", message: "Serviço Firebase Admin indisponível." },
+      { status: 503 }
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: "INVALID_REQUEST", message: "Corpo da requisição inválido." },
+      { status: 400 }
+    );
+  }
+
+  const { id } = (body as { id?: string }) ?? {};
+  if (!id || typeof id !== "string") {
+    return NextResponse.json(
+      { error: "MISSING_ID", message: "ID do usuário é obrigatório." },
+      { status: 400 }
+    );
+  }
+
+  // Impede que o próprio admin logado se exclua
+  if (id === sessao.usuario.id) {
+    return NextResponse.json(
+      { error: "CANNOT_DELETE_SELF", message: "Você não pode excluir sua própria conta de administrador." },
+      { status: 400 }
+    );
+  }
+
+  try {
+    // 1. Busca dados do usuário para identificar coleções filhas
+    const userDoc = await adminDb.collection("usuarios").doc(id).get();
+    const dados = userDoc.data();
+    const perfil = dados?.perfil as PerfilEnum | undefined;
+    const matricula = dados?.matricula as string | undefined;
+
+    // 2. Remove do Firebase Auth
+    try {
+      await adminAuth.deleteUser(id);
+    } catch (authError) {
+      console.warn("Usuário não encontrado no Auth ou já deletado:", authError);
+    }
+
+    // 3. Remove das coleções específicas do papel
+    const batch = adminDb.batch();
+
+    // Remove da coleção principal usuarios
+    batch.delete(adminDb.collection("usuarios").doc(id));
+
+    // Remove de alunos
+    if (matricula) {
+      batch.delete(adminDb.collection("alunos").doc(matricula));
+    }
+    // Procura também por usuario_id caso o id do doc não seja a matrícula
+    const snapAlunos = await adminDb.collection("alunos").where("usuario_id", "==", id).get();
+    snapAlunos.docs.forEach((doc) => batch.delete(doc.ref));
+
+    // Remove de professores_orientadores
+    batch.delete(adminDb.collection("professores_orientadores").doc(id));
+    const snapOrientadores = await adminDb.collection("professores_orientadores").where("usuario_id", "==", id).get();
+    snapOrientadores.docs.forEach((doc) => batch.delete(doc.ref));
+
+    // Remove de professores_avaliadores
+    batch.delete(adminDb.collection("professores_avaliadores").doc(id));
+    const snapAvaliadores = await adminDb.collection("professores_avaliadores").where("usuario_id", "==", id).get();
+    snapAvaliadores.docs.forEach((doc) => batch.delete(doc.ref));
+
+    // Remove de coordenadores
+    batch.delete(adminDb.collection("coordenadores").doc(id));
+    const snapCoordenadores = await adminDb.collection("coordenadores").where("usuario_id", "==", id).get();
+    snapCoordenadores.docs.forEach((doc) => batch.delete(doc.ref));
+
+    // Executa a remoção atômica
+    await batch.commit();
+
+    return NextResponse.json({
+      success: true,
+      message: "Conta e dados do usuário excluídos com sucesso!",
+    });
+  } catch (error) {
+    console.error("Erro ao excluir usuário:", error);
+    return NextResponse.json(
+      { error: "SERVER_ERROR", message: "Falha ao excluir a conta do usuário." },
+      { status: 500 }
+    );
+  }
+}

@@ -2,7 +2,7 @@ import { config } from "dotenv";
 import { initializeApp, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { getStorage } from "firebase-admin/storage";
+import { put } from "@vercel/blob";
 
 config({ path: ".env.local" });
 
@@ -17,7 +17,6 @@ initializeApp({
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
     privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
   }),
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
 });
 
 const auth = getAuth();
@@ -78,15 +77,14 @@ function gerarPdf(linhas: string[]): Buffer {
   return Buffer.from(pdf, "latin1");
 }
 
-async function enviarPdf(caminho: string, linhas: string[]) {
-  try {
-    await getStorage().bucket().file(caminho).save(gerarPdf(linhas), {
-      contentType: "application/pdf",
-      resumable: false,
-    });
-  } catch (e) {
-    console.warn(`Aviso: não consegui enviar ${caminho} ao Storage (${(e as Error).message}).`);
-  }
+async function enviarPdf(caminho: string, linhas: string[]): Promise<string> {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) throw new Error("Defina BLOB_READ_WRITE_TOKEN no .env.local para gerar PDFs de demonstração.");
+  const blob = await put(caminho, gerarPdf(linhas), {
+    access: process.env.BLOB_ACCESS === "private" ? "private" : "public",
+    addRandomSuffix: true,
+    contentType: "application/pdf",
+  });
+  return blob.url;
 }
 
 type DecisaoSeed = "APROVADO" | "APROVADO_RESSALVAS" | "REPROVADO";
@@ -545,11 +543,12 @@ async function main() {
     marco_id: "tcc1-tema-orientador",
     tcc_id: "tcc-maria",
   });
-  await db.collection("versoes_arquivo").doc("v1-maria-1").set({
-    id: "v1-maria-1",
+  const urlMaria = await enviarPdf("tccs/tcc-maria/entregas/entrega-maria-1/v1_capitulo1.pdf", ["SGTCC (demonstracao)", "Capitulo 1", "Arquivo criado pelo seed."]);
+  await db.collection("versoes_arquivo").doc("v1-maria").set({
+    id: "v1-maria",
     numeroVersao: 1,
-    arquivoUrl: "tccs/tcc-maria/entregas/entrega-maria-1/definicao_tema.pdf",
-    dataUpload: emDias(-25),
+    arquivoUrl: urlMaria,
+    dataUpload: Timestamp.now(),
     entrega_id: "entrega-maria-1",
   });
   await db.collection("feedbacks").doc("fb-maria-1").set({
@@ -764,48 +763,23 @@ async function main() {
       }
     }
 
-    // Marcos de progresso para os TCCs de demonstração
-    if (t.fase === 1) {
-      // TCC 1: Qualificação e etapas intermediárias
-      const marcosTcc1Concluidos = ["tcc1-tema-orientador", "tcc1-problema", "tcc1-objetivos", "qualificacao"];
-      for (const mId of marcosTcc1Concluidos) {
-        const entId = `entrega-${mId}-${t.chave}`;
-        await db.collection("entregas").doc(entId).set({
-          id: entId,
-          status: "CONCLUIDA",
-          dataSubmissao: emDias(-40),
-          marco_id: mId,
-          tcc_id: tccId,
-        });
-        await db.collection("versoes_arquivo").doc(`v1-${mId}-${t.chave}`).set({
-          id: `v1-${mId}-${t.chave}`,
-          numeroVersao: 1,
-          arquivoUrl: `tccs/${tccId}/entregas/${entId}/v1_${mId}.pdf`,
-          dataUpload: emDias(-40),
-          entrega_id: entId,
-        });
-      }
-    } else {
-      // TCC 2: Marcos de execução
-      const marcosTcc2Concluidos = ["tcc2-ajuste-metodologia", "tcc2-coleta-dados", "tcc2-analise-discussao"];
-      for (const mId of marcosTcc2Concluidos) {
-        const entId = `entrega-${mId}-${t.chave}`;
-        await db.collection("entregas").doc(entId).set({
-          id: entId,
-          status: "CONCLUIDA",
-          dataSubmissao: emDias(-50),
-          marco_id: mId,
-          tcc_id: tccId,
-        });
-        await db.collection("versoes_arquivo").doc(`v1-${mId}-${t.chave}`).set({
-          id: `v1-${mId}-${t.chave}`,
-          numeroVersao: 1,
-          arquivoUrl: `tccs/${tccId}/entregas/${entId}/v1_${mId}.pdf`,
-          dataUpload: emDias(-50),
-          entrega_id: entId,
-        });
-      }
-    }
+    // Qualificação concluída (histórico) + entrega final concluída pelo orientador (RN05)
+    const qId = `entrega-qualificacao-${t.chave}`;
+    await db.collection("entregas").doc(qId).set({
+      id: qId,
+      status: "CONCLUIDA",
+      dataSubmissao: emDias(-60),
+      marco_id: "qualificacao",
+      tcc_id: tccId,
+    });
+    const urlQualificacao = await enviarPdf(`tccs/${tccId}/entregas/${qId}/v1_qualificacao.pdf`, ["SGTCC (demonstracao)", "Qualificacao", t.titulo]);
+    await db.collection("versoes_arquivo").doc(`v1-qualificacao-${t.chave}`).set({
+      id: `v1-qualificacao-${t.chave}`,
+      numeroVersao: 1,
+      arquivoUrl: urlQualificacao,
+      dataUpload: emDias(-62),
+      entrega_id: qId,
+    });
 
     if (t.versaoFinal) {
       const fId = `entrega-final-${t.chave}`;
@@ -818,22 +792,19 @@ async function main() {
       });
       for (let n = 1; n <= t.versaoFinal.versoes; n++) {
         const caminho = `tccs/${tccId}/entregas/${fId}/v${n}_monografia_final.pdf`;
+        const urlFinal = await enviarPdf(caminho, [
+          "SGTCC - Monografia Final (dados de demonstracao)", "", t.titulo,
+          `Matricula: ${t.matricula}  |  TCC ${t.fase}  |  Versao ${n}`,
+          "Este PDF e gerado pelo seed para testar o leitor da banca.",
+        ]);
         await db.collection("versoes_arquivo").doc(`v${n}-final-${t.chave}`).set({
           id: `v${n}-final-${t.chave}`,
           numeroVersao: n,
-          arquivoUrl: caminho,
+          arquivoUrl: urlFinal,
           dataUpload: emDias(-t.versaoFinal.enviadoHaDias - (t.versaoFinal.versoes - n) * 3),
           entrega_id: fId,
         });
-        await enviarPdf(caminho, [
-          "SGTCC - Monografia Final (dados de demonstracao)",
-          "",
-          t.titulo,
-          `Matricula: ${t.matricula}  |  TCC ${t.fase}  |  Versao ${n}`,
-          ctx,
-          "",
-          "Este PDF e gerado pelo seed para testar o leitor da banca.",
-        ]);
+
       }
       await db.collection("feedbacks").doc(`fb-final-${t.chave}`).set({
         id: `fb-final-${t.chave}`,

@@ -118,6 +118,8 @@ export interface MarcoCronograma {
   exigeArquivo?: boolean;
   materiaisApoio?: MaterialApoio[];
   postagens?: PostagemEtapa[];
+  /** Se true, o sistema recusa envios de arquivo depois de `dataLimite` (RF03). */
+  bloqueioEstrito?: boolean;
 }
 
 export interface Entrega {

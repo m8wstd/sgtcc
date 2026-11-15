@@ -1,6 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { enviarArquivoTcc, alterarStatusEntrega } from "@/lib/entregas/cliente-upload";
+import { validarMetadadosArquivo } from "@/lib/entregas/regras";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -38,6 +41,9 @@ interface SalaEtapaViewProps {
   voltarLabel?: string;
   tccTitulo?: string;
   alunoNome?: string;
+  tccId: string;
+  marcoId: string;
+  podeEnviar: boolean;
 }
 
 export function SalaEtapaView({
@@ -48,7 +54,11 @@ export function SalaEtapaView({
   voltarLabel,
   tccTitulo,
   alunoNome,
+  tccId,
+  marcoId,
+  podeEnviar,
 }: SalaEtapaViewProps) {
+  const router = useRouter();
   const isOrientador = papelUsuario === "orientador";
   const [tabAtiva, setTabAtiva] = useState<"mural" | "materiais" | "envio" | "historico">("mural");
 
@@ -83,11 +93,16 @@ export function SalaEtapaView({
   // Submissão de Trabalho pelo Aluno
   const [arquivoUpload, setArquivoUpload] = useState<File | null>(null);
   const [uploadSucesso, setUploadSucesso] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [erroUpload, setErroUpload] = useState<string | null>(null);
   const [historico, setHistorico] = useState<HistoricoEnvioAluno[]>(etapaInicial.historicoEnvios);
+  useEffect(() => { setHistorico(etapaInicial.historicoEnvios); }, [etapaInicial.historicoEnvios]);
 
   // Parecer do Orientador
   const [parecerOrientador, setParecerOrientador] = useState("");
   const [parecerSucesso, setParecerSucesso] = useState(false);
+  const [atualizandoStatus, setAtualizandoStatus] = useState(false);
+  const [erroStatus, setErroStatus] = useState<string | null>(null);
 
   // Salvar edições da Etapa
   const handleSalvarEdicaoEtapa = (e: React.FormEvent) => {
@@ -102,17 +117,39 @@ export function SalaEtapaView({
   };
 
   // Orientador marca que está corrigindo -> move etapa para "Em correção"
-  const handleMarcarEmCorrecao = () => {
-    setStatusKanban("Em correção");
-    setSalvoSucesso(true);
-    setTimeout(() => setSalvoSucesso(false), 4000);
+  const handleMarcarEmCorrecao = async () => {
+    setErroStatus(null);
+    const id = etapaInicial.entregaId ?? `${tccId}__${marcoId}`;
+    setAtualizandoStatus(true);
+    try {
+      await alterarStatusEntrega(id, "INICIAR_REVISAO");
+      setStatusKanban("Em correção");
+      setSalvoSucesso(true);
+      router.refresh();
+      setTimeout(() => setSalvoSucesso(false), 4000);
+    } catch (e) {
+      setErroStatus(e instanceof Error ? e.message : "Não foi possível atualizar o status.");
+    } finally {
+      setAtualizandoStatus(false);
+    }
   };
 
   // Orientador marca etapa como concluída
-  const handleMarcarConcluido = () => {
-    setStatusKanban("Concluído");
-    setSalvoSucesso(true);
-    setTimeout(() => setSalvoSucesso(false), 4000);
+  const handleMarcarConcluido = async () => {
+    setErroStatus(null);
+    const id = etapaInicial.entregaId ?? `${tccId}__${marcoId}`;
+    setAtualizandoStatus(true);
+    try {
+      await alterarStatusEntrega(id, "CONCLUIR");
+      setStatusKanban("Concluído");
+      setSalvoSucesso(true);
+      router.refresh();
+      setTimeout(() => setSalvoSucesso(false), 4000);
+    } catch (e) {
+      setErroStatus(e instanceof Error ? e.message : "Não foi possível concluir a etapa.");
+    } finally {
+      setAtualizandoStatus(false);
+    }
   };
 
   // Adicionar Material de Apoio
@@ -138,27 +175,24 @@ export function SalaEtapaView({
     setMateriais(materiais.filter((m) => m.id !== id));
   };
 
-  // Ação de envio do aluno: faz a etapa ir direto para "Para correção"
-  const handleEnviarTrabalho = (e: React.FormEvent) => {
+  // Envio real: Blob -> confirmação no Firestore -> atualização da sala.
+  const handleEnviarTrabalho = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!arquivoUpload) return;
-
-    const novaVersao: HistoricoEnvioAluno = {
-      versao: historico.length + 1,
-      arquivoNome: arquivoUpload.name,
-      data:
-        new Date().toLocaleDateString("pt-BR") +
-        " " +
-        new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-      status: "Para correção",
-    };
-
-    setHistorico([novaVersao, ...historico]);
-    setStatusKanban("Para correção"); // Vai direto para "Para correção" do orientador
-    setUploadSucesso(true);
-    setArquivoUpload(null);
-    setTabAtiva("historico");
-    setTimeout(() => setUploadSucesso(false), 5000);
+    if (!arquivoUpload || !podeEnviar || enviando) return;
+    setErroUpload(null);
+    setUploadSucesso(false);
+    setEnviando(true);
+    try {
+      await enviarArquivoTcc(tccId, marcoId, arquivoUpload);
+      setArquivoUpload(null);
+      setUploadSucesso(true);
+      setTabAtiva("historico");
+      router.refresh();
+    } catch (erro) {
+      setErroUpload(erro instanceof Error ? erro.message : "O arquivo não foi salvo. Tente novamente.");
+    } finally {
+      setEnviando(false);
+    }
   };
 
   // Ação de criar nova postagem pelo Orientador
@@ -186,22 +220,33 @@ export function SalaEtapaView({
     setTimeout(() => setPostagemCriadaSucesso(false), 4000);
   };
 
-  // Parecer do orientador -> coloca em "Em correção"
-  const handleEmitirParecer = (e: React.FormEvent) => {
+  // Parecer do orientador -> coloca em "Em correção" (com chamada real à API de status)
+  const handleEmitirParecer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!parecerOrientador.trim() || historico.length === 0) return;
 
-    const novaLista = [...historico];
-    novaLista[0] = {
-      ...novaLista[0],
-      notaOuParecer: parecerOrientador.trim(),
-      status: "Em correção",
-    };
-    setHistorico(novaLista);
-    setStatusKanban("Em correção");
-    setParecerOrientador("");
-    setParecerSucesso(true);
-    setTimeout(() => setParecerSucesso(false), 4000);
+    setErroStatus(null);
+    const id = etapaInicial.entregaId ?? `${tccId}__${marcoId}`;
+    setAtualizandoStatus(true);
+    try {
+      await alterarStatusEntrega(id, "SOLICITAR_CORRECAO", parecerOrientador.trim());
+      const novaLista = [...historico];
+      novaLista[0] = {
+        ...novaLista[0],
+        notaOuParecer: parecerOrientador.trim(),
+        status: "Em correção",
+      };
+      setHistorico(novaLista);
+      setStatusKanban("Em correção");
+      setParecerOrientador("");
+      setParecerSucesso(true);
+      router.refresh();
+      setTimeout(() => setParecerSucesso(false), 4000);
+    } catch (err) {
+      setErroStatus(err instanceof Error ? err.message : "Erro ao registrar parecer.");
+    } finally {
+      setAtualizandoStatus(false);
+    }
   };
 
   return (
@@ -220,19 +265,21 @@ export function SalaEtapaView({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              disabled={atualizandoStatus}
               onClick={handleMarcarEmCorrecao}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold cursor-pointer transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-700 text-xs font-semibold cursor-pointer transition-colors"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Marcar &quot;Em Correção&quot;</span>
+              <span>{atualizandoStatus ? "Atualizando..." : 'Marcar "Em Correção"'}</span>
             </button>
             <button
               type="button"
+              disabled={atualizandoStatus}
               onClick={handleMarcarConcluido}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold cursor-pointer transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 text-emerald-700 text-xs font-semibold cursor-pointer transition-colors"
             >
               <Check className="w-3.5 h-3.5" />
-              <span>Marcar &quot;Concluído&quot;</span>
+              <span>{atualizandoStatus ? "Atualizando..." : 'Marcar "Concluído"'}</span>
             </button>
             <button
               type="button"
@@ -256,6 +303,13 @@ export function SalaEtapaView({
         <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center gap-2">
           <Check className="w-4 h-4 text-emerald-600" />
           <span>Status da etapa atualizado com sucesso! (Status atual: {statusKanban})</span>
+        </div>
+      )}
+
+      {erroStatus && (
+        <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs font-medium flex items-center gap-2">
+          <X className="w-4 h-4 text-red-600 cursor-pointer" onClick={() => setErroStatus(null)} />
+          <span>{erroStatus}</span>
         </div>
       )}
 
@@ -783,17 +837,28 @@ export function SalaEtapaView({
           {uploadSucesso && (
             <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center gap-2.5">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>Arquivo submetido com sucesso! A etapa foi enviada direto para &quot;Para correção&quot; do orientador.</span>
+              <span>Arquivo salvo no Vercel Blob e registrado no histórico de versões.</span>
             </div>
           )}
 
+          {erroUpload && <p role="alert" className="p-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs">{erroUpload}</p>}
+          {!podeEnviar && <p className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-xs">Esta etapa não permite novos envios no momento.</p>}
           <form onSubmit={handleEnviarTrabalho} className="space-y-4">
             <div className="border-2 border-dashed border-[#dfe2e8] hover:border-[#1e78f0] rounded-xl p-10 text-center bg-[#fafbfc] transition-colors">
               <input
                 type="file"
                 id="upload-arquivo-sala"
                 accept=".pdf,.docx"
-                onChange={(e) => setArquivoUpload(e.target.files?.[0] || null)}
+                disabled={!podeEnviar || enviando}
+                onChange={(e) => {
+                  setErroUpload(null);
+                  const selecionado = e.target.files?.[0] ?? null;
+                  if (selecionado) {
+                    const validacao = validarMetadadosArquivo(selecionado.name, selecionado.size);
+                    if (!validacao.ok) { setErroUpload(validacao.mensagem); e.target.value = ""; setArquivoUpload(null); return; }
+                  }
+                  setArquivoUpload(selecionado);
+                }}
                 className="hidden"
               />
               <label htmlFor="upload-arquivo-sala" className="cursor-pointer block space-y-2.5">
@@ -814,10 +879,11 @@ export function SalaEtapaView({
                 </span>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors shadow-xs cursor-pointer justify-center"
+                  disabled={enviando || !podeEnviar}
+                  className="px-5 py-2.5 disabled:opacity-50 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-colors shadow-xs cursor-pointer justify-center"
                 >
                   <Send className="w-4 h-4" />
-                  <span>Enviar para Correção do Orientador</span>
+                  <span>{enviando ? "Enviando e salvando..." : "Enviar para Correção do Orientador"}</span>
                 </button>
               </div>
             )}
@@ -872,9 +938,10 @@ export function SalaEtapaView({
                 <div className="flex justify-end gap-2">
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
+                    disabled={atualizandoStatus}
+                    className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
                   >
-                    Registrar Parecer (Mover para Em Correção)
+                    {atualizandoStatus ? "Registrando..." : "Registrar Parecer (Mover para Em Correção)"}
                   </button>
                 </div>
               </form>
@@ -897,13 +964,14 @@ export function SalaEtapaView({
                     )}
                   </div>
                   <div className="shrink-0 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => alert(`Baixando versão: ${envio.arquivoNome}`)}
-                      className="px-2.5 py-1 text-xs font-semibold text-[#1e78f0] bg-white border border-[#dfe2e8] hover:bg-blue-50 rounded-md cursor-pointer"
-                    >
-                      Baixar Arquivo
-                    </button>
+                    {envio.id && (
+                      <>
+                        <a href={`/api/documentos/${encodeURIComponent(envio.id)}`} target="_blank" rel="noopener noreferrer"
+                          className="px-2.5 py-1 text-xs font-semibold text-[#1e78f0] bg-white border border-[#dfe2e8] hover:bg-blue-50 rounded-md">Ler aqui</a>
+                        <a href={`/api/documentos/${encodeURIComponent(envio.id)}?download=1`}
+                          className="px-2.5 py-1 text-xs font-semibold text-[#1e78f0] bg-white border border-[#dfe2e8] hover:bg-blue-50 rounded-md">Baixar Arquivo</a>
+                      </>
+                    )}
                     <StatusPill status={envio.status} />
                   </div>
                 </div>

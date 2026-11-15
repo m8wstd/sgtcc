@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Compass, FolderKanban } from "lucide-react";
 import { homeDoPerfil } from "@/lib/auth/perfis";
-import type { PerfilEnum } from "@/types";
+import { PerfilEnum } from "@/types";
 
 interface FloatingHubProps {
   perfil: PerfilEnum;
@@ -23,11 +23,22 @@ export function FloatingHub({ perfil }: FloatingHubProps) {
       href: inicioHref,
       icone: Home,
       ativo:
-        pathname === inicioHref ||
-        pathname === "/dashboard" ||
-        (pathname.startsWith(`${inicioHref}`) && !pathname.includes("/coordenacao")) ||
-        (pathname.startsWith("/dashboard/tcc/") && perfil !== "ADMIN"),
+        (pathname === inicioHref ||
+          pathname === "/dashboard" ||
+          (pathname.startsWith(`${inicioHref}`) && !pathname.includes("/coordenacao")) ||
+          (pathname.startsWith("/dashboard/tcc/") && perfil !== "ADMIN")) &&
+        pathname !== "/dashboard/aluno/entregas",
     },
+    ...(perfil === PerfilEnum.ALUNO
+      ? [
+          {
+            rotulo: "Entregas",
+            href: "/dashboard/aluno/entregas",
+            icone: Compass,
+            ativo: pathname === "/dashboard/aluno/entregas",
+          },
+        ]
+      : []),
     ...(perfil === "ADMIN"
       ? [
           {

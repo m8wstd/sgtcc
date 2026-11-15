@@ -1,71 +1,49 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { requireSessao } from "@/lib/auth/server-session";
-import { getEtapaDoTcc } from "@/lib/data/queries";
+import { getPainelTcc } from "@/lib/data/queries";
+import { montarSalaReal } from "@/lib/entregas/sala-real";
 import { SalaEtapaView } from "@/components/etapa/sala-etapa-view";
-import { type SalaEtapaTcc, mapStatusParaColuna } from "@/app/dashboard/aluno/dados-etapas";
-import { formatarData } from "@/components/layout/status";
+import { PerfilEnum } from "@/types";
 
 export const metadata = { title: "Etapa do TCC — SGTCC" };
 export const dynamic = "force-dynamic";
 
-interface EtapaTccPageProps {
-  params: Promise<{ id: string; slug: string }>;
-}
+interface Props { params: Promise<{ id: string; slug: string }> }
 
-async function ConteudoEtapaTcc({ params }: EtapaTccPageProps) {
+async function ConteudoEtapaTcc({ params }: Props) {
   const { id, slug } = await params;
   const sessao = await requireSessao();
-
-  const dados = await getEtapaDoTcc(sessao, id, slug);
-  if (!dados) notFound();
-
-  const { painel, item } = dados;
-  const isOrientador = sessao.perfil === "ORIENTADOR" || sessao.perfil === "COORDENACAO" || sessao.perfil === "ADMIN";
-
-  const etapaObj: SalaEtapaTcc = {
-    slug,
-    titulo: item.marco.titulo,
-    progresso: item.statusEfetivo === "CONCLUIDA" ? 100 : item.statusEfetivo === "AGUARDANDO_ENVIO" ? 0 : 50,
-    dataEntrega: formatarData(item.marco.dataLimite),
-    statusKanban: mapStatusParaColuna(item.statusEfetivo),
-    comentarioOrientadora: item.feedbacks[0]?.comentario ?? "",
-    descricaoInstrucoes: item.marco.descricao ?? "",
-    postagensProfessor: (item.marco.postagens ?? []).map((p) => ({
-      id: p.id,
-      autorNome: p.autorNome,
-      autorPapel: p.autorPapel === "ORIENTADOR" ? "Professor(a) Orientador(a)" : "Coordenação de TCC",
-      dataHora: typeof p.dataHora === "string" ? p.dataHora : new Date(p.dataHora).toLocaleDateString("pt-BR"),
-      titulo: p.titulo,
-      conteudo: p.conteudo,
-      anexos: p.anexos ?? [],
-    })),
-    materiaisFixados: item.marco.materiaisApoio ?? [],
-    historicoEnvios: item.versoes.map((v) => ({
-      versao: v.numeroVersao,
-      arquivoNome: v.arquivoUrl.split("/").pop() ?? `Versao_${v.numeroVersao}.pdf`,
-      data: formatarData(v.dataUpload),
-      status: item.statusEfetivo,
-    })),
-  };
-
+  const painel = await getPainelTcc(sessao, id);
+  if (!painel) notFound();
+  const item = painel.itens.find((i) => {
+    if (i.marco.id === slug) return true;
+    const slugNormalizado = i.marco.titulo
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)+/g, "");
+    return slugNormalizado === slug;
+  });
+  if (!item) notFound();
+  const isOrientador = sessao.perfil === PerfilEnum.ORIENTADOR || sessao.perfil === PerfilEnum.COORDENACAO || sessao.perfil === PerfilEnum.ADMIN;
   return (
     <SalaEtapaView
-      etapa={etapaObj}
+      etapa={montarSalaReal(item)}
+      tccId={id}
+      marcoId={item.marco.id}
+      podeEnviar={item.statusEfetivo !== "CONCLUIDA" && (!item.marco.bloqueioEstrito || new Date(String(item.marco.dataLimite)).getTime() >= Date.now())}
       nomeUsuario={sessao.nome ?? "Usuário"}
       papelUsuario={isOrientador ? "orientador" : "aluno"}
-      voltarHref={`/dashboard/tcc/${id}`}
-      voltarLabel="Voltar ao TCC"
+      voltarHref={`/dashboard/tcc/${encodeURIComponent(id)}`}
+      voltarLabel="Voltar ao TCC do Aluno"
       tccTitulo={painel.tcc.titulo}
       alunoNome={painel.tcc.alunoNome}
     />
   );
 }
 
-export default function EtapaTccPage({ params }: EtapaTccPageProps) {
-  return (
-    <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-[#f4f5f7]" />}>
-      <ConteudoEtapaTcc params={params} />
-    </Suspense>
-  );
+export default function EtapaTccPage({ params }: Props) {
+  return <Suspense fallback={<div className="h-64 animate-pulse rounded-xl bg-[#f4f5f7]" />}><ConteudoEtapaTcc params={params} /></Suspense>;
 }
