@@ -92,12 +92,13 @@ export function SalaEtapaPageClient({ etapa, nomeAluno }: SalaEtapaPageClientPro
             </p>
           </div>
 
-          <div className="min-w-[200px] space-y-2 bg-[#f4f5f7] p-4 rounded-xl border border-[#dfe2e8]">
+          {/* Progresso sutil da Etapa */}
+          <div className="min-w-[170px] space-y-1 bg-[#f4f5f7] p-3 rounded-xl border border-[#dfe2e8]">
             <div className="flex justify-between items-baseline text-xs">
-              <span className="text-[#6b7385] font-semibold uppercase tracking-wider">Progresso da Etapa</span>
-              <b className="text-xl font-bold text-[#111a2e]">{etapa.progresso}%</b>
+              <span className="text-[#6b7385] font-semibold uppercase tracking-wider">Progresso</span>
+              <b className="text-sm font-bold text-[#111a2e]">{etapa.progresso}%</b>
             </div>
-            <ProgressBar value={etapa.progresso} className="h-2.5" />
+            <ProgressBar value={etapa.progresso} className="h-1.5" />
           </div>
         </div>
 
@@ -129,18 +130,20 @@ export function SalaEtapaPageClient({ etapa, nomeAluno }: SalaEtapaPageClientPro
             <span>Materiais do Professor ({etapa.materiaisFixados.length})</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setTabAtiva("envio")}
-            className={`px-4 py-2 rounded-full text-xs sm:text-[13px] border transition-colors cursor-pointer flex items-center gap-1.5 ${
-              tabAtiva === "envio"
-                ? "bg-[#0f1b33] text-white border-[#0f1b33] font-medium"
-                : "border-[#dfe2e8] bg-white text-[#111a2e] hover:bg-[#f4f5f7]"
-            }`}
-          >
-            <UploadCloud className="w-3.5 h-3.5" />
-            <span>Submeter Trabalho</span>
-          </button>
+          {etapa.statusKanban !== "Para correção" && etapa.statusKanban !== "Concluído" && (
+            <button
+              type="button"
+              onClick={() => setTabAtiva("envio")}
+              className={`px-4 py-2 rounded-full text-xs sm:text-[13px] border transition-colors cursor-pointer flex items-center gap-1.5 ${
+                tabAtiva === "envio"
+                  ? "bg-[#0f1b33] text-white border-[#0f1b33] font-medium"
+                  : "border-[#dfe2e8] bg-white text-[#111a2e] hover:bg-[#f4f5f7]"
+              }`}
+            >
+              <UploadCloud className="w-3.5 h-3.5" />
+              <span>Submeter Trabalho</span>
+            </button>
+          )}
 
           <button
             type="button"

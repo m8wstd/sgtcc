@@ -16,7 +16,7 @@ export function TccDetalheClient({
   voltarHref,
   isOrientador,
 }: TccDetalheClientProps) {
-  const { tcc, itens, outrosTccsDoAluno = [] } = painel;
+  const { tcc, itens = [], outrosTccsDoAluno = [] } = painel;
 
   return (
     <PainelTccModular
@@ -28,11 +28,14 @@ export function TccDetalheClient({
       saudacaoNome={isOrientador ? tcc.alunoNome : undefined}
       subtitulo={
         isOrientador
-          ? "Visualização do trabalho do orientando com Kanban e acesso direto a cada sala de etapa para postar e orientar."
+          ? "Visualização do trabalho do orientando com Kanban e acompanhamento das etapas do TCC."
           : undefined
       }
       outrosTccs={outrosTccsDoAluno}
-      onTrocarTccHref={(tccId) => `/dashboard/tcc/${tccId}`}
+      onTrocarTccHref={(tccId) => {
+        const outro = outrosTccsDoAluno.find((o) => o.id === tccId);
+        return `/dashboard/tcc/${tccId}${outro?.fase ? `?fase=${outro.fase}` : ""}`;
+      }}
     />
   );
 }

@@ -10,6 +10,14 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "SGTCC - Sistema de Gestão de TCC",
   description: "Plataforma integrada de Acompanhamento e Gestão de TCC",
+  icons: {
+    icon: [
+      { url: "/sgtcc-browser-icon.png" },
+      { url: "/favicon.ico" },
+    ],
+    shortcut: "/sgtcc-browser-icon.png",
+    apple: "/sgtcc-browser-icon.png",
+  },
 };
 
 export default function RootLayout({

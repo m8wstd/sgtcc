@@ -382,17 +382,10 @@ export function SalaEtapaView({
               {tituloEtapa}
             </h1>
             <p className="text-xs sm:text-sm text-[#6b7385]">
-              {tccTitulo && <span className="font-medium text-[#111a2e]">{tccTitulo} &bull; </span>}
-              {alunoNome && <span>Aluno: <b className="text-[#111a2e]">{alunoNome}</b> &bull; </span>}
+              {tccTitulo && <span className="font-medium text-[#111a2e]">{tccTitulo} • </span>}
+              {alunoNome && <span>Aluno: <b className="text-[#111a2e]">{alunoNome}</b> • </span>}
               Prazo limite da sala: <b className="text-[#111a2e]">{dataEntrega}</b>
             </p>
-          </div>
-
-          <div className="min-w-[190px] space-y-1 bg-[#f4f5f7] p-3 rounded-xl border border-[#dfe2e8]">
-            <span className="text-[11px] font-semibold text-[#6b7385] uppercase tracking-wider block">
-              Status Atual da Etapa
-            </span>
-            <b className="text-base font-bold text-[#111a2e]">{statusKanban}</b>
           </div>
         </div>
 
@@ -424,7 +417,7 @@ export function SalaEtapaView({
             <span>Materiais de Apoio ({materiais.length})</span>
           </button>
 
-          {!isOrientador && (
+          {!isOrientador && statusKanban !== "Para correção" && statusKanban !== "Concluído" && (
             <button
               type="button"
               onClick={() => setTabAtiva("envio")}
@@ -785,8 +778,8 @@ export function SalaEtapaView({
         </div>
       )}
 
-      {/* ABA 3: SUBMETER TRABALHO (APENAS PARA O ALUNO) */}
-      {!isOrientador && tabAtiva === "envio" && (
+      {/* ABA 3: SUBMETER TRABALHO (APENAS PARA O ALUNO E ENQUANTO NÃO ESTIVER EM CORREÇÃO/CONCLUÍDO) */}
+      {!isOrientador && tabAtiva === "envio" && statusKanban !== "Para correção" && statusKanban !== "Concluído" && (
         <div className="border border-[#dfe2e8] rounded-[10px] p-6 bg-white shadow-xs space-y-5">
           <div>
             <h2 className="text-base font-bold text-[#111a2e]">

@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { AdminDashboardContent } from "./admin-dashboard-content";
 
-export const metadata = { title: "Dashboard do Administrador — SGTCC" };
+export const metadata = { title: "Painel do Administrador — SGTCC" };
 export const dynamic = "force-dynamic";
 
 export default function AdminDashboardPage() {

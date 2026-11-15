@@ -16,6 +16,8 @@ import {
   List,
   CheckCircle2,
   Clock,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 interface OrientadorDashboardClientProps {
@@ -69,8 +71,11 @@ function mapAlunoParaColunaOrientador(t: TccResumo): ColunaOrientadorKey {
 export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDashboardClientProps) {
   const [faseAtiva, setFaseAtiva] = useState<TabFase>("todas");
   const [cursoAtivo, setCursoAtivo] = useState<string>("todos");
+  const [statusAtivo, setStatusAtivo] = useState<"todos" | "Pendente" | "Em revisão" | "Concluído">("todos");
   const [viewMode, setViewMode] = useState<"kanban" | "lista">("kanban");
   const [busca, setBusca] = useState("");
+  const [exibirPendente, setExibirPendente] = useState(true);
+  const [exibirConcluido, setExibirConcluido] = useState(false);
 
   const cursosDisponiveis = useMemo(() => {
     const setC = new Set<string>();
@@ -97,6 +102,8 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
           ? t.fase === 1 || !t.fase
           : t.fase === 2;
       const matchCurso = cursoAtivo === "todos" ? true : t.curso === cursoAtivo;
+      const col = mapAlunoParaColunaOrientador(t);
+      const matchStatus = statusAtivo === "todos" ? true : col === statusAtivo;
       const termo = busca.toLowerCase();
       const matchBusca =
         !termo ||
@@ -104,30 +111,32 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
         t.alunoNome.toLowerCase().includes(termo) ||
         t.aluno_id.toLowerCase().includes(termo);
 
-      return matchFase && matchCurso && matchBusca;
+      return matchFase && matchCurso && matchStatus && matchBusca;
     });
-  }, [tccs, faseAtiva, cursoAtivo, busca]);
+  }, [tccs, faseAtiva, cursoAtivo, statusAtivo, busca]);
 
   return (
     <div className="space-y-6 w-full">
       {/* Cabeçalho */}
       <div className="border-b border-[#dfe2e8] pb-4">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
-          Olá, Prof. {nomeOrientador}
+          Painel de Orientações
         </h1>
         <p className="text-sm text-[#6b7385] mt-1">
           Acompanhamento dos seus orientandos por status de entrega no semestre atual
         </p>
       </div>
 
-      {/* Stats Cards com as 3 métricas principais */}
+      {/* Stats Cards com as 3 métricas principais e atalhos de filtro */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         <StatCard
           label="Total de Orientandos"
           value={stats.total}
-          variant="blue"
+          variant="primary"
           icon={<Users className="w-5 h-5" />}
           className="p-5"
+          onClick={() => setStatusAtivo("todos")}
+          active={statusAtivo === "todos"}
         />
         <StatCard
           label="Pendente (Sem Entrega)"
@@ -135,6 +144,8 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
           variant="neutral"
           icon={<Clock className="w-5 h-5" />}
           className="p-5"
+          onClick={() => setStatusAtivo(statusAtivo === "Pendente" ? "todos" : "Pendente")}
+          active={statusAtivo === "Pendente"}
         />
         <StatCard
           label="Em Revisão"
@@ -142,6 +153,8 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
           variant="yellow"
           icon={<BookOpen className="w-5 h-5" />}
           className="p-5"
+          onClick={() => setStatusAtivo(statusAtivo === "Em revisão" ? "todos" : "Em revisão")}
+          active={statusAtivo === "Em revisão"}
         />
         <StatCard
           label="TCCs Concluídos"
@@ -149,6 +162,8 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
           variant="green"
           icon={<CheckCircle2 className="w-5 h-5" />}
           className="p-5"
+          onClick={() => setStatusAtivo(statusAtivo === "Concluído" ? "todos" : "Concluído")}
+          active={statusAtivo === "Concluído"}
         />
       </div>
 
@@ -217,6 +232,34 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
           </div>
 
           {/* Alternador de Visão */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setExibirPendente((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                exibirPendente
+                  ? "bg-[#d5d9e0] text-[#111a2e] border-[#c0c5cd]"
+                  : "bg-white text-[#6b7385] border-[#dfe2e8] hover:text-[#111a2e]"
+              }`}
+            >
+              {exibirPendente ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              <span>Pendentes ({stats.pendente})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setExibirConcluido((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                exibirConcluido
+                  ? "bg-[#86d994] text-[#111a2e] border-[#6bc77b]"
+                  : "bg-white text-[#6b7385] border-[#dfe2e8] hover:text-[#111a2e]"
+              }`}
+            >
+              {exibirConcluido ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              <span>Concluídos ({stats.concluidos})</span>
+            </button>
+          </div>
+
           <div className="flex items-center gap-1 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
             <button
               type="button"
@@ -249,11 +292,25 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
       {/* KANBAN DO ORIENTADOR (3 COLUNAS: Pendente, Em revisão, Concluído) */}
       {viewMode === "kanban" ? (
         <div className="w-full overflow-x-auto pb-4">
-          <div className="grid grid-cols-3 gap-4 min-w-[760px]">
-            {COLUNAS_ORIENTADOR.map((col) => {
-              const alunosNaColuna = tccsFiltrados.filter(
-                (t) => mapAlunoParaColunaOrientador(t) === col.key
-              );
+          <div
+            className={`grid gap-4 min-w-[760px] ${
+              exibirPendente && exibirConcluido
+                ? "grid-cols-3"
+                : exibirPendente || exibirConcluido
+                ? "grid-cols-2"
+                : "grid-cols-1"
+            }`}
+          >
+            {COLUNAS_ORIENTADOR
+              .filter((col) => {
+                if (col.key === "Pendente" && !exibirPendente) return false;
+                if (col.key === "Concluído" && !exibirConcluido) return false;
+                return true;
+              })
+              .map((col) => {
+                const alunosNaColuna = tccsFiltrados.filter(
+                  (t) => mapAlunoParaColunaOrientador(t) === col.key
+                );
 
               return (
                 <div
@@ -329,8 +386,15 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
             </div>
           ) : (
             <div className="divide-y divide-[#dfe2e8]">
-              {tccsFiltrados.map((t) => {
-                const statusColuna = mapAlunoParaColunaOrientador(t);
+              {tccsFiltrados
+                .filter((t) => {
+                  const statusColuna = mapAlunoParaColunaOrientador(t);
+                  if (statusColuna === "Pendente" && !exibirPendente) return false;
+                  if (statusColuna === "Concluído" && !exibirConcluido) return false;
+                  return true;
+                })
+                .map((t) => {
+                  const statusColuna = mapAlunoParaColunaOrientador(t);
 
                 return (
                   <Link

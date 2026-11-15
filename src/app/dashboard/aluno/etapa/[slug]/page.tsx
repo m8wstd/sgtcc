@@ -5,6 +5,8 @@ import { getPainelTcc, listarTccsVisiveis } from "@/lib/data/queries";
 import { montarSalaReal } from "@/lib/entregas/sala-real";
 import { PerfilEnum } from "@/types";
 import { SalaEtapaView } from "@/components/etapa/sala-etapa-view";
+import { type SalaEtapaTcc, mapStatusParaColuna } from "@/app/dashboard/aluno/dados-etapas";
+import { formatarData } from "@/components/layout/status";
 
 export const metadata = { title: "Sala da Etapa — SGTCC" };
 export const dynamic = "force-dynamic";
@@ -16,6 +18,7 @@ interface Props {
 
 async function ConteudoEtapa({ params, searchParams }: Props) {
   const { slug } = await params;
+  const sParams = await searchParams;
   const sessao = await requireSessao(PerfilEnum.ALUNO);
   const tccs = await listarTccsVisiveis(sessao);
   const tccEscolhido = (await searchParams)?.tcc;
@@ -34,6 +37,8 @@ async function ConteudoEtapa({ params, searchParams }: Props) {
       papelUsuario="aluno"
       voltarHref={`/dashboard/aluno?tcc=${encodeURIComponent(tccId)}`}
       voltarLabel="Voltar ao Painel do Aluno"
+      tccTitulo={painel.tcc.titulo}
+      alunoNome={painel.tcc.alunoNome}
     />
   );
 }

@@ -15,6 +15,11 @@ import {
   X,
   Check,
   Award,
+  User,
+  GraduationCap,
+  BookOpen,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -28,63 +33,22 @@ import {
 import type { ItemMarco, TccResumo } from "@/lib/data/queries";
 import type { StatusEntrega } from "@/types";
 
-// ── Colunas Kanban Fidedignas ao Protótipo ──────────────────────────────────
+// ── Colunas Kanban com cores alinhadas aos Stickers do Design System ────────
 export const COLUNAS_KANBAN = [
-  { key: "Pendente", label: "Pendente", cor: "#aeb5c2" },
-  { key: "Em andamento", label: "Em andamento", cor: "#5aa5ee" },
-  { key: "Para correção", label: "Para correção", cor: "#f0c93a" },
+  { key: "Pendente", label: "Pendente", cor: "#d5d9e0" },
+  { key: "Em andamento", label: "Em andamento", cor: "#8ec5ff" },
+  { key: "Para correção", label: "Para correção", cor: "#ffd84d" },
   { key: "Em correção", label: "Em correção", cor: "#ff7f7f" },
-  { key: "Concluído", label: "Concluído", cor: "#52b565" },
+  { key: "Concluído", label: "Concluído", cor: "#86d994" },
 ] as const;
 
-export type ColunaKanbanKey = (typeof COLUNAS_KANBAN)[number]["key"];
+import {
+  mapStatusParaColuna,
+  slugDoMarco,
+  type ColunaKanbanKey,
+} from "@/app/dashboard/aluno/dados-etapas";
 
-/**
- * Regra de Negócio solicitada:
- * - Pendente: etapas que ainda não foram começadas (AGUARDANDO_ENVIO ou ATRASADA sem versões)
- * - Em andamento: etapas que estão sendo feitas pelo aluno
- * - Para correção: quando o aluno envia o arquivo (PRONTA_PARA_REVISAO)
- * - Em correção: quando o orientador marca que está corrigindo ou solicita correções (EM_REVISAO ou SOLICITADA_CORRECAO)
- * - Concluído: etapas marcadas como concluídas (CONCLUIDA)
- */
-export function mapStatusParaColuna(status: StatusEntrega): ColunaKanbanKey {
-  switch (status) {
-    case "AGUARDANDO_ENVIO":
-    case "ATRASADA":
-      return "Pendente";
-    case "EM_ANDAMENTO" as any:
-      return "Em andamento";
-    case "PRONTA_PARA_REVISAO":
-      return "Para correção";
-    case "EM_REVISAO":
-    case "SOLICITADA_CORRECAO":
-      return "Em correção";
-    case "CONCLUIDA":
-      return "Concluído";
-    default:
-      return "Pendente";
-  }
-}
-
-export function slugDoMarco(titulo: string, idx: number): string {
-  const t = titulo.toLowerCase();
-  if (t.includes("defin") || t.includes("tema")) return "definicao-tema";
-  if (t.includes("plano") || t.includes("termo") || t.includes("compromisso")) return "plano-trabalho";
-  if (t.includes("introdu")) return "introducao";
-  if (t.includes("correlat")) return "trabalhos-correlatos";
-  if (t.includes("referenc") || t.includes("teor")) return "referencial-teorico";
-  if (t.includes("resumo") || t.includes("abstract")) return "resumo-abstract";
-  if (t.includes("revis") || t.includes("abnt")) return "revisao-abnt";
-  if (t.includes("integrado") || t.includes("capitulo")) return "capitulos-integrados";
-  if (t.includes("proto") || t.includes("teste") || t.includes("usab")) return "prototipacao-testes";
-  if (t.includes("metod")) return "metodologia";
-  if (t.includes("result")) return "resultados";
-  if (t.includes("conclu")) return "conclusao";
-  if (t.includes("biblio") || t.includes("catalogo") || t.includes("ficha")) return "entrega-biblioteca";
-  if (t.includes("apresent") || t.includes("defesa") || t.includes("banca")) return "apresentacao-banca";
-  const fallback = ["introducao", "referencial-teorico", "metodologia", "resultados", "revisao-abnt", "conclusao"];
-  return fallback[idx % fallback.length];
-}
+export { mapStatusParaColuna, slugDoMarco, type ColunaKanbanKey };
 
 export interface PainelTccModularProps {
   tcc: TccResumo;
@@ -111,8 +75,10 @@ export function PainelTccModular({
 }: PainelTccModularProps) {
   const isOrientador = papel === "orientador";
   const [viewMode, setViewMode] = useState<"kanban" | "lista">("kanban");
+  const [exibirPendente, setExibirPendente] = useState(true);
+  const [exibirConcluido, setExibirConcluido] = useState(false);
 
-  // Estado dinâmico de etapas
+  // Estado dinâmico de etapas sincronizado com a prop do servidor
   const [itens, setItens] = useState<ItemMarco[]>(itensIniciais);
   useEffect(() => setItens(itensIniciais), [itensIniciais]);
   const [mostrarCriarEtapa, setMostrarCriarEtapa] = useState(false);
@@ -127,8 +93,6 @@ export function PainelTccModular({
   // Conclusão GERAL do TCC (1 ou 2) = porcentagem de etapas concluídas no trabalho
   const porcentagemGeral =
     totalMarcos > 0 ? Math.round((concluidos / totalMarcos) * 100) : 0;
-
-  const totalComentarios = itens.reduce((acc, i) => acc + i.feedbacks.length, 0);
 
   // Próxima entrega
   const proximoNaoConcluido = itens.find((i) => i.statusEfetivo !== "CONCLUIDA");
@@ -175,24 +139,37 @@ export function PainelTccModular({
 
   return (
     <div className="space-y-6 w-full">
-      {/* Topo / Barra de Navegação */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        {voltarHref ? (
+      {/* Topo / Botão Voltar (quando existir) */}
+      {voltarHref && (
+        <div>
           <Link
             href={voltarHref}
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1e78f0] hover:underline"
           >
             <ArrowLeft className="h-4 w-4" /> {voltarLabel ?? "Voltar"}
           </Link>
-        ) : (
-          <div />
-        )}
+        </div>
+      )}
 
-        {/* Seletor de TCC */}
+      {/* Cabeçalho da Seção alinhado lado a lado com a Fase do Aluno (TCC 1 e TCC 2) */}
+      <div className="border-b border-[#dfe2e8] pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
+            {isOrientador ? `Acompanhamento • ${tcc.alunoNome}` : "Plano de Trabalho do TCC"}
+          </h1>
+          <p className="text-sm text-[#6b7385] mt-1">
+            {subtitulo ??
+              (isOrientador
+                ? "Clique no cartão da etapa para abrir a sala, postar materiais, orientar e avaliar."
+                : "Acompanhe o andamento do seu TCC. Clique no cartão da etapa para acessar a sala.")}
+          </p>
+        </div>
+
+        {/* Seletor de Fase do Aluno alinhado diretamente com o título do Plano de Trabalho */}
         {outrosTccs.length > 1 && (
-          <div className="flex items-center gap-1.5 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
+          <div className="flex items-center gap-1.5 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8] shrink-0 self-start sm:self-center">
             <span className="text-[11px] font-semibold text-[#6b7385] px-2">
-              Fase do Aluno:
+              Fase:
             </span>
             {outrosTccs.map((outro, i) => {
               const ativo = outro.id === tcc.id;
@@ -323,76 +300,73 @@ export function PainelTccModular({
         </form>
       )}
 
-      {/* Stats Cards com as métricas do protótipo */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-        <StatCard
-          label={`Conclusão Geral ${tcc.fase ? `(TCC ${tcc.fase})` : ""}`}
-          value={`${porcentagemGeral}%`}
-          variant="green"
-          className="p-5"
-        />
-        <StatCard
-          label="Etapas Concluídas"
-          value={`${concluidos} de ${totalMarcos}`}
-          variant="blue"
-          className="p-5"
-        />
-        <StatCard
-          label="Próxima Entrega"
-          value={proximaEntregaTexto}
-          variant="yellow"
-          icon={<Calendar className="w-5 h-5" />}
-          className="p-5"
-        />
-        <StatCard
-          label="Comentários Registrados"
-          value={totalComentarios}
-          variant="red"
-          icon={<MessageSquare className="w-5 h-5" />}
-          className="p-5"
-        />
-      </div>
-
-      {/* Cabeçalho do Trabalho / Informações do TCC */}
-      <div className="border border-[#dfe2e8] rounded-[10px] p-6 bg-white shadow-xs space-y-4">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div className="space-y-1.5 max-w-2xl">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold text-[#1e78f0] uppercase tracking-wider">
-                {tcc.fase ? `TCC ${tcc.fase}` : "Trabalho de Conclusão de Curso"}
+      {/* Cabeçalho do Trabalho / Informações do TCC com Barra de Progresso Geral Sutil no Topo */}
+      <div className="relative border border-[#dfe2e8] rounded-[10px] bg-white shadow-xs overflow-hidden">
+        {/* Barra sutil de Progresso Geral no topo de todo o card */}
+        <div className="w-full bg-[#f4f5f7] border-b border-[#dfe2e8] px-6 py-2.5">
+          <div className="flex items-center justify-between text-[11px] mb-1.5">
+            {/* Canto superior esquerdo: Porcentagem colada e texto logo em seguida */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-[#111a2e] bg-white px-2 py-0.5 rounded border border-[#dfe2e8]">
+                {porcentagemGeral}%
               </span>
-              {tcc.curso && (
-                <span className="text-[11px] font-semibold bg-blue-50 text-[#1e78f0] px-2 py-0.5 rounded border border-blue-100">
-                  {tcc.curso}
-                </span>
-              )}
-              <StatusPill status={ROTULO_STATUS_TCC[tcc.statusGeral] ?? tcc.statusGeral} />
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold text-[#111a2e] leading-snug">
-              {tcc.titulo}
-            </h2>
-            <p className="text-xs text-[#6b7385]">
-              Aluno: <span className="font-semibold text-[#111a2e]">{tcc.alunoNome}</span> (Matrícula: {tcc.aluno_id}) &bull; Orientador:{" "}
-              <span className="font-semibold text-[#111a2e]">{tcc.orientadorNome}</span>
-            </p>
+
+            {/* Canto superior direito: exclusivo para a próxima data de entrega */}
+            <div className="flex items-center gap-1.5 text-[#6b7385]">
+              <Calendar className="w-3.5 h-3.5 text-[#1e78f0]" />
+              <span>
+                Próxima entrega: <strong className="text-[#111a2e]">{proximaEntregaTexto}</strong>
+              </span>
+            </div>
           </div>
+          <ProgressBar value={porcentagemGeral} className="h-1.5 w-full" />
+        </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            {/* Botão de Envio para a Banca Examinadora */}
-            <Link
-              href={`/dashboard/tcc/${tcc.id}/banca`}
-              className="px-4 py-2 bg-[#0f1b33] hover:bg-[#1a2d52] text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-colors shadow-xs"
-            >
-              <Award className="w-4 h-4 text-yellow-400" />
-              <span>{isOrientador ? "Ver Envio à Banca" : "Enviar para a Banca Avaliadora"}</span>
-            </Link>
-
-            <div className="min-w-[170px] space-y-1.5 bg-[#f4f5f7] p-3 rounded-lg border border-[#dfe2e8]">
-              <div className="flex justify-between items-baseline text-xs">
-                <span className="text-[#6b7385] font-medium">Progresso Geral</span>
-                <b className="text-base font-bold text-[#111a2e]">{porcentagemGeral}%</b>
+        <div className="p-6">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div className="space-y-1.5 max-w-2xl">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-[#1e78f0] uppercase tracking-wider">
+                  {tcc.fase ? `TCC ${tcc.fase}` : "Trabalho de Conclusão de Curso"}
+                </span>
+                {tcc.curso && (
+                  <span className="text-[11px] font-semibold bg-blue-50 text-[#1e78f0] px-2 py-0.5 rounded border border-blue-100">
+                    {tcc.curso}
+                  </span>
+                )}
+                <StatusPill status={ROTULO_STATUS_TCC[tcc.statusGeral] ?? tcc.statusGeral} />
               </div>
-              <ProgressBar value={porcentagemGeral} className="h-2" />
+              <h2 className="text-xl sm:text-2xl font-bold text-[#111a2e] leading-snug">
+                {tcc.titulo}
+              </h2>
+              <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#f4f5f7] border border-[#dfe2e8] text-[#111a2e]">
+                  <User className="w-3.5 h-3.5 text-[#1e78f0]" />
+                  <span className="text-[#6b7385]">Aluno:</span>
+                  <strong className="font-semibold">{tcc.alunoNome}</strong>
+                  <span className="text-[11px] text-[#6b7385] bg-white px-1.5 py-0.5 rounded border border-[#dfe2e8]">
+                    Matrícula: {tcc.aluno_id}
+                  </span>
+                </div>
+
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#f4f5f7] border border-[#dfe2e8] text-[#111a2e]">
+                  <GraduationCap className="w-3.5 h-3.5 text-[#1e78f0]" />
+                  <span className="text-[#6b7385]">Orientador:</span>
+                  <strong className="font-semibold">{tcc.orientadorNome}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              {/* Botão de Ver Envio à Banca para Aluno e Orientador */}
+              <Link
+                href={`/dashboard/tcc/${tcc.id}/banca`}
+                className="px-4 py-2 bg-[#d97706] hover:bg-[#b45309] text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-colors shadow-xs"
+              >
+                <Award className="w-4 h-4 text-amber-200" />
+                <span>Ver Envio à Banca</span>
+              </Link>
             </div>
           </div>
         </div>
@@ -409,7 +383,36 @@ export function PainelTccModular({
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Toggles para Esconder/Mostrar "Pendente" e "Concluído" */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setExibirPendente((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
+                exibirPendente
+                  ? "bg-[#d5d9e0] text-[#111a2e] border-[#c0c5cd]"
+                  : "bg-white text-[#6b7385] border-[#dfe2e8] hover:text-[#111a2e]"
+              }`}
+            >
+              {exibirPendente ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              <span>Pendentes ({itens.filter((i) => mapStatusParaColuna(i.statusEfetivo) === "Pendente").length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setExibirConcluido((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
+                exibirConcluido
+                  ? "bg-[#86d994] text-[#111a2e] border-[#6bc77b]"
+                  : "bg-white text-[#6b7385] border-[#dfe2e8] hover:text-[#111a2e]"
+              }`}
+            >
+              {exibirConcluido ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              <span>Concluídos ({concluidos})</span>
+            </button>
+          </div>
+
           {/* Botão de Nova Etapa para o Orientador */}
           {isOrientador && !mostrarCriarEtapa && (
             <button
@@ -453,9 +456,21 @@ export function PainelTccModular({
 
       {/* Visualização Kanban: O card inteiro é um Link clicável para a página da etapa */}
       {viewMode === "kanban" ? (
-        <div className="w-full overflow-x-auto pb-4">
-          <div className="grid grid-cols-5 gap-3.5 min-w-[760px]">
-            {COLUNAS_KANBAN.map((col) => {
+        <div className="w-full pb-4">
+          <div
+            className={`grid gap-3.5 w-full grid-cols-1 sm:grid-cols-2 ${
+              exibirPendente && exibirConcluido
+                ? "lg:grid-cols-5"
+                : (exibirPendente || exibirConcluido)
+                ? "lg:grid-cols-4"
+                : "lg:grid-cols-3"
+            }`}
+          >
+            {COLUNAS_KANBAN.filter((col) => {
+              if (col.key === "Pendente" && !exibirPendente) return false;
+              if (col.key === "Concluído" && !exibirConcluido) return false;
+              return true;
+            }).map((col) => {
               const blocosDaColuna = itens.filter(
                 (item) => mapStatusParaColuna(item.statusEfetivo) === col.key
               );
@@ -485,39 +500,24 @@ export function PainelTccModular({
                         ? `/dashboard/tcc/${tcc.id}/etapa/${slug}`
                         : `/dashboard/aluno/etapa/${slug}?tcc=${encodeURIComponent(tcc.id)}`;
                       const atrasado = item.statusEfetivo === "ATRASADA";
-                      const ultimoFeedback = item.feedbacks[0]?.comentario ?? null;
 
-                      const progresso =
-                        (item as any).progresso !== undefined
-                          ? (item as any).progresso
-                          : (item.marco as any).progresso !== undefined
-                          ? (item.marco as any).progresso
-                          : item.statusEfetivo === "CONCLUIDA"
-                          ? 100
-                          : item.statusEfetivo === "PRONTA_PARA_REVISAO"
-                          ? 85
-                          : item.statusEfetivo === "EM_REVISAO"
-                          ? 70
-                          : (item.statusEfetivo as any) === "EM_ANDAMENTO"
-                          ? 50
-                          : 0;
-
-                      const dataEntregaTexto =
-                        (item.marco as any).dataEntregaFormatada ??
-                        (item.marco.dataLimite ? formatarData(item.marco.dataLimite) : "28/10/2026");
+                      // Última postagem / feedback real ou descrição da etapa do cronograma
+                      const ultimaPostagem = item.marco.postagens?.[item.marco.postagens.length - 1];
+                      const ultimoFeedback = item.feedbacks[0];
+                      const descricaoEtapa = item.marco.descricao;
 
                       return (
                         <Link
                           key={item.marco.id}
                           href={etapaHref}
-                          className={`block border rounded-[10px] p-3.5 bg-white space-y-2.5 shadow-2xs transition-all hover:border-[#1e78f0] hover:shadow-xs cursor-pointer group text-left ${
+                          className={`group relative block border rounded-xl p-3.5 bg-white space-y-2.5 shadow-2xs transition-all duration-200 hover:border-[#1e78f0] hover:shadow-md hover:-translate-y-0.5 cursor-pointer text-left ${
                             atrasado ? "border-red-300" : "border-[#dfe2e8]"
                           }`}
                         >
                           {/* Cabeçalho do bloco */}
                           <div className="flex items-start justify-between gap-1">
                             <h4 className="text-[12.5px] font-bold text-[#111a2e] group-hover:text-[#1e78f0] transition-colors leading-snug">
-                              {item.marco.titulo}
+                              {idx + 1}. {item.marco.titulo}
                             </h4>
                             {atrasado && (
                               <span className="shrink-0 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
@@ -526,23 +526,28 @@ export function PainelTccModular({
                             )}
                           </div>
 
-                          {/* Barra de Progresso do Bloco */}
-                          <ProgressBar value={progresso} className="h-1.5" />
-
-                          {/* Métricas do Bloco (Fiel ao protótipo) */}
+                          {/* Prazo Limite */}
                           <div className="flex justify-between items-center text-[11px] text-[#6b7385] font-medium">
-                            <span>{progresso}% concluído</span>
-                            <span>Entrega {dataEntregaTexto}</span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-[#6b7385]" />
+                              Prazo: {formatarData(item.marco.dataLimite)}
+                            </span>
+                            <span className="text-[10px] font-semibold text-[#1e78f0] bg-blue-50 px-1.5 py-0.5 rounded">
+                              {col.label}
+                            </span>
                           </div>
 
-                          {/* Comentário da Orientadora / Orientador (Fiel ao protótipo) */}
-                          <div className="p-2.5 bg-[#f4f5f7] border-l-2 border-[#1e78f0] rounded-[4px] text-[11.5px] text-[#111a2e]">
-                            <b className="block text-[10px] text-[#6b7385] uppercase tracking-wider mb-0.5">
-                              Comentário da orientadora
-                            </b>
-                            <p className="line-clamp-2 leading-relaxed text-[#111a2e]">
-                              {ultimoFeedback ?? (col.key === "Pendente" ? "Bloco ainda não iniciado." : "Aguardando nova revisão.")}
+                          {/* Descrição objetiva da etapa cadastrada no cronograma */}
+                          {descricaoEtapa && (
+                            <p className="text-[11.5px] text-[#6b7385] line-clamp-2 leading-relaxed">
+                              {descricaoEtapa}
                             </p>
+                          )}
+
+                          {/* Indicador sutil de que todo o card é clicável */}
+                          <div className="pt-1 flex items-center justify-end text-[10px] font-semibold text-[#6b7385] group-hover:text-[#1e78f0] transition-colors gap-1">
+                            <span>Acessar sala</span>
+                            <span className="transition-transform group-hover:translate-x-1">&rarr;</span>
                           </div>
                         </Link>
                       );
@@ -554,9 +559,17 @@ export function PainelTccModular({
           </div>
         </div>
       ) : (
-        /* Visualização em Lista */
-        <div className="space-y-4">
-          {itens.map(({ marco, entrega, statusEfetivo, versoes, feedbacks }, idx) => {
+        /* Visualização em Lista - Cada item é um card clicável com indicação sutil */
+        <div className="space-y-3.5">
+          {itens
+            .filter(({ statusEfetivo }) => {
+              const colKey = mapStatusParaColuna(statusEfetivo);
+              if (colKey === "Pendente" && !exibirPendente) return false;
+              if (colKey === "Concluído" && !exibirConcluido) return false;
+              return true;
+            })
+            .map((item, idx) => {
+            const { marco, statusEfetivo } = item;
             const statusLabel = ROTULO_STATUS_ENTREGA[statusEfetivo] ?? statusEfetivo;
             const isConcluido = statusEfetivo === "CONCLUIDA";
             const slug = encodeURIComponent(marco.id);
@@ -565,30 +578,37 @@ export function PainelTccModular({
               : `/dashboard/aluno/etapa/${slug}?tcc=${encodeURIComponent(tcc.id)}`;
 
             return (
-              <div
+              <Link
                 key={marco.id}
-                className="border border-[#dfe2e8] rounded-[10px] bg-white overflow-hidden shadow-xs"
+                href={etapaHref}
+                className="group relative block border border-[#dfe2e8] hover:border-[#1e78f0] rounded-xl bg-white overflow-hidden shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer p-4 sm:p-5"
               >
-                <div className="px-5 py-4 bg-[#f4f5f7] border-b border-[#dfe2e8] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h4 className="text-sm font-bold text-[#111a2e]">
-                      {idx + 1}. {marco.titulo}
-                    </h4>
-                    <p className="text-xs text-[#6b7385] flex items-center gap-1.5 mt-0.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-[#111a2e] group-hover:text-[#1e78f0] transition-colors truncate">
+                        {idx + 1}. {marco.titulo}
+                      </h4>
+                      {atrasado && (
+                        <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
+                          Atrasado
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-[#6b7385] flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-[#6b7385]" /> Prazo limite:{" "}
                       <span className="font-medium text-[#111a2e]">
                         {formatarData(marco.dataLimite)}
                       </span>
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={etapaHref}
-                      className="px-3 py-1 rounded-md bg-white border border-[#dfe2e8] hover:border-[#1e78f0] text-[#1e78f0] text-xs font-semibold flex items-center gap-1 transition-colors"
-                    >
-                      <span>Entrar na Sala da Etapa</span>
-                    </Link>
+
+                  <div className="flex items-center gap-3 self-end sm:self-center">
                     <StatusPill status={statusLabel} />
+                    <span className="text-xs font-semibold text-[#6b7385] group-hover:text-[#1e78f0] flex items-center gap-1 transition-colors">
+                      <span className="hidden sm:inline">Acessar sala</span>
+                      <span className="transition-transform group-hover:translate-x-1">&rarr;</span>
+                    </span>
                   </div>
                 </div>
 

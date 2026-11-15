@@ -9,24 +9,20 @@ import { LogoutButton } from "@/components/layout/logout-button";
 
 export const dynamic = "force-dynamic";
 
-async function Sidebar() {
+async function ShellComSessao({ children }: { children: React.ReactNode }) {
   const sessao = await requireSessao();
-  const inicial = (sessao.nome || sessao.email || "U").charAt(0).toUpperCase();
 
   return (
-    <aside className="w-full lg:w-60 bg-[#0f1b33] text-white flex flex-col p-4 sm:p-5 flex-shrink-0 min-h-auto lg:min-h-screen justify-between border-b lg:border-b-0 lg:border-r border-[#1a2a4a]">
-      <div className="space-y-6">
-        {/* Logo SGTCC */}
-        <div className="flex items-center gap-3 px-2 py-1">
-          <Image
-            src="/sgtcc-icon.png"
-            alt="SGTCC Cap Icon"
-            width={32}
-            height={32}
-            className="w-7 h-auto"
-          />
-          <span className="font-bold text-xl tracking-tight text-white">SGTCC</span>
-        </div>
+    <>
+      {/* Topbar moderna com Notificações e Menu de Perfil no canto superior direito */}
+      <DashboardHeader
+        usuario={{
+          id: sessao.uid,
+          nome: sessao.nome ?? null,
+          email: sessao.email ?? null,
+          perfil: sessao.perfil,
+        }}
+      />
 
         {/* Navegação restrita ao Dashboard do perfil */}
         <nav className="space-y-1">
@@ -49,40 +45,27 @@ async function Sidebar() {
         </nav>
       </div>
 
-      {/* Perfil do Usuário e Logout */}
-      <div className="pt-4 mt-6 border-t border-[#1a2a4a] space-y-3">
-        <div className="flex items-center gap-3 px-1">
-          <div className="w-9 h-9 rounded-full bg-white text-[#0f1b33] font-bold flex items-center justify-center text-sm flex-shrink-0">
-            {inicial}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold truncate text-white">
-              {sessao.nome ?? sessao.email}
-            </p>
-            <span className="inline-block text-[11px] font-medium text-blue-200 uppercase tracking-wide">
-              {ROTULO_PERFIL[sessao.perfil]}
-            </span>
-          </div>
-        </div>
-        <div className="pt-1">
-          <LogoutButton />
-        </div>
-      </div>
-    </aside>
+      {/* Hub Flutuante moderno (Apple Liquid Glass) */}
+      <FloatingHub perfil={sessao.perfil} />
+    </>
   );
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-[#ffffff] text-[#111a2e] font-sans">
-      <Suspense fallback={<div className="w-full lg:w-60 bg-[#0f1b33] h-20 lg:min-h-screen" />}>
-        <Sidebar />
+    <div className="min-h-screen flex flex-col bg-[#ffffff] text-[#111a2e] font-sans antialiased selection:bg-blue-100 selection:text-blue-900">
+      <Suspense
+        fallback={
+          <div className="w-full flex-1 flex flex-col">
+            <div className="h-16 w-full border-b border-[#dfe2e8] bg-white animate-pulse" />
+            <div className="max-w-[1400px] mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+              <div className="h-40 w-full rounded-2xl bg-[#f4f5f7] animate-pulse" />
+            </div>
+          </div>
+        }
+      >
+        <ShellComSessao>{children}</ShellComSessao>
       </Suspense>
-      <main className="flex-1 p-6 sm:p-10 bg-[#ffffff] min-w-0 overflow-y-auto">
-        <div className="max-w-6xl mx-auto w-full">
-          {children}
-        </div>
-      </main>
     </div>
   );
 }

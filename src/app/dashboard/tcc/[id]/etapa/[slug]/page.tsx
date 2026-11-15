@@ -6,7 +6,7 @@ import { montarSalaReal } from "@/lib/entregas/sala-real";
 import { SalaEtapaView } from "@/components/etapa/sala-etapa-view";
 import { PerfilEnum } from "@/types";
 
-export const metadata = { title: "Etapa do TCC — Orientação — SGTCC" };
+export const metadata = { title: "Etapa do TCC — SGTCC" };
 export const dynamic = "force-dynamic";
 
 interface Props { params: Promise<{ id: string; slug: string }> }
