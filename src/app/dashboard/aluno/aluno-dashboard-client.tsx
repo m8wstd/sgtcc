@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import type { TccResumo, PainelTcc, ItemMarco } from "@/lib/data/queries";
+import type { TccResumo, PainelTcc } from "@/lib/data/queries";
 import { PainelTccModular } from "@/components/tcc-view/painel-tcc-modular";
 
 interface AlunoDashboardClientProps {
@@ -11,38 +11,17 @@ interface AlunoDashboardClientProps {
   tccIdAtivo?: string | null;
 }
 
-export function AlunoDashboardClient({
-  nomeAluno,
-  tccs,
-  detalhesPrincipal,
-  tccIdAtivo,
-}: AlunoDashboardClientProps) {
-  const tccPrincipal = tccs.find((t) => t.id === tccIdAtivo) ?? tccs[0] ?? null;
-
-  // Itens reais do banco de dados (vindos de getPainelTcc)
-  const itens: ItemMarco[] = detalhesPrincipal?.itens ?? [];
-
-  const tccMock: TccResumo = tccPrincipal ?? {
-    id: "tcc-principal",
-    titulo: "Trabalho de Conclusão de Curso",
-    aluno_id: "aluno",
-    orientador_id: "orientador",
-    statusGeral: "EM_ANDAMENTO",
-    alunoNome: nomeAluno,
-    orientadorNome: "Orientador",
-    fase: 1,
-    curso: "Graduação",
-  };
-
+export function AlunoDashboardClient({ nomeAluno, tccs, detalhesPrincipal }: AlunoDashboardClientProps) {
+  if (!detalhesPrincipal) return <p className="text-sm text-[#6b7385]">Nenhum TCC vinculado ao seu usuário.</p>;
   return (
     <PainelTccModular
-      tcc={tccMock}
-      itens={itens}
+      tcc={detalhesPrincipal.tcc}
+      itens={detalhesPrincipal.itens}
       papel="aluno"
       saudacaoNome={nomeAluno}
-      subtitulo="Acompanhe o andamento do seu TCC. Selecione a disciplina e clique nas etapas para acessar a sala."
+      subtitulo="Acompanhe as etapas do seu TCC e consulte os arquivos realmente enviados."
       outrosTccs={tccs}
-      onTrocarTccHref={(tccId) => `/dashboard/aluno?tcc=${tccId}`}
+      onTrocarTccHref={(tccId) => `/dashboard/aluno?tcc=${encodeURIComponent(tccId)}`}
     />
   );
 }
