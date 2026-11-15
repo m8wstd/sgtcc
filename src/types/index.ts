@@ -110,6 +110,14 @@ export interface MarcoCronograma {
   titulo: string;
   dataLimite: Date | string;
   cronograma_id: string;
+  fase?: 1 | 2; // TCC 1 ou TCC 2
+  ordem?: number;
+  tipo?: TipoEtapa;
+  descricao?: string;
+  instrucoes?: string;
+  exigeArquivo?: boolean;
+  materiaisApoio?: MaterialApoio[];
+  postagens?: PostagemEtapa[];
   /** Se true, o sistema recusa envios de arquivo depois de `dataLimite` (RF03). */
   bloqueioEstrito?: boolean;
 }

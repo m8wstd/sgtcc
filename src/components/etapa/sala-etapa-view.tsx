@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { enviarArquivoTcc } from "@/lib/entregas/cliente-upload";
+import { enviarArquivoTcc, alterarStatusEntrega } from "@/lib/entregas/cliente-upload";
 import { validarMetadadosArquivo } from "@/lib/entregas/regras";
 import Link from "next/link";
 import {
@@ -101,6 +101,8 @@ export function SalaEtapaView({
   // Parecer do Orientador
   const [parecerOrientador, setParecerOrientador] = useState("");
   const [parecerSucesso, setParecerSucesso] = useState(false);
+  const [atualizandoStatus, setAtualizandoStatus] = useState(false);
+  const [erroStatus, setErroStatus] = useState<string | null>(null);
 
   // Salvar edições da Etapa
   const handleSalvarEdicaoEtapa = (e: React.FormEvent) => {
@@ -115,17 +117,39 @@ export function SalaEtapaView({
   };
 
   // Orientador marca que está corrigindo -> move etapa para "Em correção"
-  const handleMarcarEmCorrecao = () => {
-    setStatusKanban("Em correção");
-    setSalvoSucesso(true);
-    setTimeout(() => setSalvoSucesso(false), 4000);
+  const handleMarcarEmCorrecao = async () => {
+    setErroStatus(null);
+    const id = etapaInicial.entregaId ?? `${tccId}__${marcoId}`;
+    setAtualizandoStatus(true);
+    try {
+      await alterarStatusEntrega(id, "INICIAR_REVISAO");
+      setStatusKanban("Em correção");
+      setSalvoSucesso(true);
+      router.refresh();
+      setTimeout(() => setSalvoSucesso(false), 4000);
+    } catch (e) {
+      setErroStatus(e instanceof Error ? e.message : "Não foi possível atualizar o status.");
+    } finally {
+      setAtualizandoStatus(false);
+    }
   };
 
   // Orientador marca etapa como concluída
-  const handleMarcarConcluido = () => {
-    setStatusKanban("Concluído");
-    setSalvoSucesso(true);
-    setTimeout(() => setSalvoSucesso(false), 4000);
+  const handleMarcarConcluido = async () => {
+    setErroStatus(null);
+    const id = etapaInicial.entregaId ?? `${tccId}__${marcoId}`;
+    setAtualizandoStatus(true);
+    try {
+      await alterarStatusEntrega(id, "CONCLUIR");
+      setStatusKanban("Concluído");
+      setSalvoSucesso(true);
+      router.refresh();
+      setTimeout(() => setSalvoSucesso(false), 4000);
+    } catch (e) {
+      setErroStatus(e instanceof Error ? e.message : "Não foi possível concluir a etapa.");
+    } finally {
+      setAtualizandoStatus(false);
+    }
   };
 
   // Adicionar Material de Apoio
@@ -196,22 +220,33 @@ export function SalaEtapaView({
     setTimeout(() => setPostagemCriadaSucesso(false), 4000);
   };
 
-  // Parecer do orientador -> coloca em "Em correção"
-  const handleEmitirParecer = (e: React.FormEvent) => {
+  // Parecer do orientador -> coloca em "Em correção" (com chamada real à API de status)
+  const handleEmitirParecer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!parecerOrientador.trim() || historico.length === 0) return;
 
-    const novaLista = [...historico];
-    novaLista[0] = {
-      ...novaLista[0],
-      notaOuParecer: parecerOrientador.trim(),
-      status: "Em correção",
-    };
-    setHistorico(novaLista);
-    setStatusKanban("Em correção");
-    setParecerOrientador("");
-    setParecerSucesso(true);
-    setTimeout(() => setParecerSucesso(false), 4000);
+    setErroStatus(null);
+    const id = etapaInicial.entregaId ?? `${tccId}__${marcoId}`;
+    setAtualizandoStatus(true);
+    try {
+      await alterarStatusEntrega(id, "SOLICITAR_CORRECAO", parecerOrientador.trim());
+      const novaLista = [...historico];
+      novaLista[0] = {
+        ...novaLista[0],
+        notaOuParecer: parecerOrientador.trim(),
+        status: "Em correção",
+      };
+      setHistorico(novaLista);
+      setStatusKanban("Em correção");
+      setParecerOrientador("");
+      setParecerSucesso(true);
+      router.refresh();
+      setTimeout(() => setParecerSucesso(false), 4000);
+    } catch (err) {
+      setErroStatus(err instanceof Error ? err.message : "Erro ao registrar parecer.");
+    } finally {
+      setAtualizandoStatus(false);
+    }
   };
 
   return (
@@ -230,19 +265,21 @@ export function SalaEtapaView({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              disabled={atualizandoStatus}
               onClick={handleMarcarEmCorrecao}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold cursor-pointer transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-700 text-xs font-semibold cursor-pointer transition-colors"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Marcar &quot;Em Correção&quot;</span>
+              <span>{atualizandoStatus ? "Atualizando..." : 'Marcar "Em Correção"'}</span>
             </button>
             <button
               type="button"
+              disabled={atualizandoStatus}
               onClick={handleMarcarConcluido}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold cursor-pointer transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 text-emerald-700 text-xs font-semibold cursor-pointer transition-colors"
             >
               <Check className="w-3.5 h-3.5" />
-              <span>Marcar &quot;Concluído&quot;</span>
+              <span>{atualizandoStatus ? "Atualizando..." : 'Marcar "Concluído"'}</span>
             </button>
             <button
               type="button"
@@ -266,6 +303,13 @@ export function SalaEtapaView({
         <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center gap-2">
           <Check className="w-4 h-4 text-emerald-600" />
           <span>Status da etapa atualizado com sucesso! (Status atual: {statusKanban})</span>
+        </div>
+      )}
+
+      {erroStatus && (
+        <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs font-medium flex items-center gap-2">
+          <X className="w-4 h-4 text-red-600 cursor-pointer" onClick={() => setErroStatus(null)} />
+          <span>{erroStatus}</span>
         </div>
       )}
 
@@ -894,9 +938,10 @@ export function SalaEtapaView({
                 <div className="flex justify-end gap-2">
                   <button
                     type="submit"
-                    className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
+                    disabled={atualizandoStatus}
+                    className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
                   >
-                    Registrar Parecer (Mover para Em Correção)
+                    {atualizandoStatus ? "Registrando..." : "Registrar Parecer (Mover para Em Correção)"}
                   </button>
                 </div>
               </form>

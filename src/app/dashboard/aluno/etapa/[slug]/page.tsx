@@ -25,7 +25,17 @@ async function ConteudoEtapa({ params, searchParams }: Props) {
   const tccId = tccs.some((t) => t.id === tccEscolhido) ? tccEscolhido! : tccs[0]?.id;
   if (!tccId) notFound();
   const painel = await getPainelTcc(sessao, tccId);
-  const item = painel?.itens.find((i) => i.marco.id === slug);
+  if (!painel) notFound();
+  const item = painel.itens.find((i) => {
+    if (i.marco.id === slug) return true;
+    const slugNormalizado = i.marco.titulo
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)+/g, "");
+    return slugNormalizado === slug;
+  });
   if (!item) notFound();
   return (
     <SalaEtapaView

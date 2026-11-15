@@ -15,8 +15,18 @@ async function ConteudoEtapaTcc({ params }: Props) {
   const { id, slug } = await params;
   const sessao = await requireSessao();
   const painel = await getPainelTcc(sessao, id);
-  const item = painel?.itens.find((i) => i.marco.id === slug);
-  if (!painel || !item) notFound();
+  if (!painel) notFound();
+  const item = painel.itens.find((i) => {
+    if (i.marco.id === slug) return true;
+    const slugNormalizado = i.marco.titulo
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)+/g, "");
+    return slugNormalizado === slug;
+  });
+  if (!item) notFound();
   const isOrientador = sessao.perfil === PerfilEnum.ORIENTADOR || sessao.perfil === PerfilEnum.COORDENACAO || sessao.perfil === PerfilEnum.ADMIN;
   return (
     <SalaEtapaView

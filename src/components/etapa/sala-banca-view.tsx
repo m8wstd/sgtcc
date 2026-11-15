@@ -63,18 +63,6 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
     if (!versaoFinal) return;
     setCarregandoDoc(true);
     setErroDoc(null);
-    try {
-      window.open(await urlDoDocumento(versaoFinal.id), "_blank", "noopener,noreferrer");
-    } catch (e) {
-      setErroDoc(e instanceof Error ? e.message : "Erro ao baixar o documento.");
-    } finally {
-      setCarregandoDoc(false);
-    }
-  }
-
-  async function abrirEmNovaAba() {
-    if (!versaoFinal) return;
-    setErroDoc(null);
     // Abrir no clique evita bloqueio de pop-ups após uma operação assíncrona.
     const novaAba = window.open("about:blank", "_blank");
     try {
@@ -88,6 +76,8 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
     } catch (e) {
       novaAba?.close();
       setErroDoc(e instanceof Error ? e.message : "Erro ao abrir o documento.");
+    } finally {
+      setCarregandoDoc(false);
     }
   }
 
@@ -233,7 +223,7 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
           {envioSucesso && (
             <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>Versão final salva e registrada. A aprovação e o encaminhamento à banca são etapas próprias da RF04/RF06.</span>
+              <span>Versão final enviada com sucesso! Os avaliadores da banca e o orientador já têm acesso ao documento para avaliação e acompanhamento.</span>
             </div>
           )}
 

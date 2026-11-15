@@ -22,6 +22,7 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
+  Trash2,
 } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -95,6 +96,8 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
 
   // Senha na Edição (opcional)
   const [edicaoSenha, setEdicaoSenha] = useState("");
+  const [excluindo, setExcluindo] = useState(false);
+  const [confirmarExclusao, setConfirmarExclusao] = useState(false);
 
   // Estado do Link de Conclusão de Cadastro no Modal de Edição
   const [linkConclusaoEdicao, setLinkConclusaoEdicao] = useState<{
@@ -308,6 +311,7 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
       );
       setUsuarioEmEdicao(null);
       setEdicaoSenha("");
+      setConfirmarExclusao(false);
       setMensagemSucesso("Dados do usuário atualizados com sucesso!");
       setTimeout(() => setMensagemSucesso(null), 5000);
     } catch (err: unknown) {
@@ -315,6 +319,37 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
       setMensagemErro(msg);
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function handleExcluirUsuario() {
+    if (!usuarioEmEdicao) return;
+    setExcluindo(true);
+    setMensagemErro(null);
+
+    try {
+      const res = await fetch("/api/admin/usuarios", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: usuarioEmEdicao.id }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || "Erro ao excluir conta do usuário.");
+      }
+
+      setUsuariosLocais((prev) => prev.filter((u) => u.id !== usuarioEmEdicao.id));
+      setUsuarioEmEdicao(null);
+      setConfirmarExclusao(false);
+      setEdicaoSenha("");
+      setMensagemSucesso("Conta do usuário excluída com sucesso!");
+      setTimeout(() => setMensagemSucesso(null), 5000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao excluir usuário.";
+      setMensagemErro(msg);
+    } finally {
+      setExcluindo(false);
     }
   }
 
@@ -567,6 +602,7 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
                     <div
                       onClick={() => {
                         setMensagemErro(null);
+                        setConfirmarExclusao(false);
                         setUsuarioEmEdicao({ ...u });
                         buscarLinkConclusaoUsuario(u.email);
                       }}
@@ -1132,21 +1168,61 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
                 )}
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-[#dfe2e8]">
-                <button
-                  type="button"
-                  onClick={() => setUsuarioEmEdicao(null)}
-                  className="px-4 py-2 border border-[#dfe2e8] rounded-lg text-xs font-semibold text-[#6b7385] hover:bg-[#f4f5f7] cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={salvando}
-                  className="px-5 py-2 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer disabled:opacity-50"
-                >
-                  {salvando ? "Salvando..." : "Salvar Alterações"}
-                </button>
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-[#dfe2e8]">
+                <div>
+                  {!confirmarExclusao ? (
+                    <button
+                      type="button"
+                      disabled={excluindo || salvando}
+                      onClick={() => setConfirmarExclusao(true)}
+                      className="px-3 py-2 border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                      title="Excluir permanentemente este usuário"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Apagar Conta</span>
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1.5 p-1 bg-red-50 border border-red-200 rounded-lg">
+                      <span className="text-[11px] font-semibold text-red-800 px-1">Tem certeza?</span>
+                      <button
+                        type="button"
+                        disabled={excluindo}
+                        onClick={handleExcluirUsuario}
+                        className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-[11px] font-bold cursor-pointer transition-colors disabled:opacity-50"
+                      >
+                        {excluindo ? "Apagando..." : "Sim, apagar"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={excluindo}
+                        onClick={() => setConfirmarExclusao(false)}
+                        className="px-2 py-1 bg-white hover:bg-gray-100 text-[#4b5563] border border-[#dfe2e8] rounded text-[11px] font-medium cursor-pointer"
+                      >
+                        Não
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUsuarioEmEdicao(null);
+                      setConfirmarExclusao(false);
+                    }}
+                    className="px-4 py-2 border border-[#dfe2e8] rounded-lg text-xs font-semibold text-[#6b7385] hover:bg-[#f4f5f7] cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={salvando || excluindo}
+                    className="px-5 py-2 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg shadow-xs cursor-pointer disabled:opacity-50"
+                  >
+                    {salvando ? "Salvando..." : "Salvar Alterações"}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

@@ -14,6 +14,7 @@ export type StatusRouteContext = { params: Promise<{ entregaId: string }> };
 interface Dependencies {
   getSession(request: Request): Promise<AuthenticatedSession>;
   alterarStatus(id: string, sessao: AuthenticatedSession, comando: ComandoStatus): Promise<ResultadoStatus>;
+  obterRevisao?(id: string, sessao: AuthenticatedSession): Promise<{ id: string; status: string; revisao: string }>;
 }
 
 const defaultDependencies: Dependencies = {
@@ -21,6 +22,17 @@ const defaultDependencies: Dependencies = {
   alterarStatus(id, sessao, comando) {
     if (!adminDb) throw new EntregaError(503, "DELIVERY_SERVICE_UNAVAILABLE", "O serviço de entregas está indisponível.");
     return criarServicoEntregas(criarRepositorioEntregas(adminDb), confirmadorSubmissaoRF03).alterarStatus(id, sessao, comando);
+  },
+  async obterRevisao(id, _sessao) {
+    if (!adminDb) throw new EntregaError(503, "DELIVERY_SERVICE_UNAVAILABLE", "O serviço de entregas está indisponível.");
+    const doc = await adminDb.collection("entregas").doc(id).get();
+    if (!doc.exists || !doc.updateTime) throw new EntregaError(404, "NOT_FOUND", "Entrega não encontrada.");
+    const dados = doc.data();
+    return {
+      id: doc.id,
+      status: dados?.status ?? "AGUARDANDO_ENVIO",
+      revisao: `${doc.updateTime.seconds}:${doc.updateTime.nanoseconds}`,
+    };
   },
 };
 
@@ -52,6 +64,35 @@ function parseComando(body: unknown): ComandoStatus {
     acao: dados.acao as AcaoEntrega,
     revisaoEsperada: dados.revisaoEsperada,
     comentario: dados.comentario as string | undefined,
+  };
+}
+
+export function createStatusGetHandler(dependencies: Dependencies = defaultDependencies) {
+  return async function GET(request: Request, context: StatusRouteContext): Promise<Response> {
+    let response: Response;
+    try {
+      const sessao = await dependencies.getSession(request);
+      const { entregaId } = await context.params;
+      if (!entregaId || entregaId.includes("/") || entregaId === "." || entregaId === ".."
+        || Buffer.byteLength(entregaId, "utf8") > 1500) {
+        throw new EntregaError(400, "INVALID_REQUEST", "Identificador de entrega inválido.");
+      }
+      if (!dependencies.obterRevisao) {
+        throw new EntregaError(503, "DELIVERY_SERVICE_UNAVAILABLE", "O serviço de entregas está indisponível.");
+      }
+      const resultado = await dependencies.obterRevisao(entregaId, sessao);
+      response = Response.json(resultado);
+    } catch (error) {
+      if (error instanceof EntregaError) {
+        response = Response.json({ error: error.code, message: error.message }, { status: error.status });
+      } else if (error instanceof AuthHttpError) {
+        response = toAuthErrorResponse(error);
+      } else {
+        response = Response.json({ error: "DELIVERY_SERVICE_UNAVAILABLE", message: "Não foi possível carregar a entrega." }, { status: 503 });
+      }
+    }
+    response.headers.set("Cache-Control", "no-store");
+    return response;
   };
 }
 

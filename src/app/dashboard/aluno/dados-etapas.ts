@@ -67,6 +67,8 @@ export interface SalaEtapaTcc {
   progresso: number;
   dataEntrega: string;
   statusKanban: ColunaKanbanKey;
+  statusEfetivo?: string;
+  entregaId?: string;
   comentarioOrientadora: string;
   descricaoInstrucoes: string;
   postagensProfessor: PostagemSala[];

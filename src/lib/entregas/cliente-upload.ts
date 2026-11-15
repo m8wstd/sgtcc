@@ -42,3 +42,70 @@ export async function verificarDocumento(id: string): Promise<string> {
   if (!res.ok) throw new Error(res.headers.get("x-document-error") || "Arquivo indisponível no armazenamento.");
   return url;
 }
+
+export async function alterarStatusEntrega(
+  entregaId: string,
+  acao: "INICIAR_REVISAO" | "SOLICITAR_CORRECAO" | "CONCLUIR",
+  comentario?: string,
+) {
+  // 1. Obter revisão e status atual da entrega
+  const getRes = await fetch(`/api/entregas/${encodeURIComponent(entregaId)}/status`, {
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+  if (!getRes.ok) {
+    const getErr = await getRes.json().catch(() => null);
+    throw new Error(getErr?.message || "Não foi possível carregar os dados da entrega.");
+  }
+  const entregaAtual = (await getRes.json()) as { id: string; status: string; revisao: string };
+
+  // Se a ação for SOLICITAR_CORRECAO ou CONCLUIR e ainda estiver em PRONTA_PARA_REVISAO,
+  // primeiro avança para EM_REVISAO se necessário
+  let revisao = entregaAtual.revisao;
+  let status = entregaAtual.status;
+  const csrf = await tokenCsrf();
+
+  if (status === "PRONTA_PARA_REVISAO" && (acao === "SOLICITAR_CORRECAO" || acao === "CONCLUIR")) {
+    const transRes = await fetch(`/api/entregas/${encodeURIComponent(entregaId)}/status`, {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrf,
+      },
+      body: JSON.stringify({ acao: "INICIAR_REVISAO", revisaoEsperada: revisao }),
+    });
+    if (!transRes.ok) {
+      const err = await transRes.json().catch(() => null);
+      throw new Error(err?.message || "Falha ao iniciar revisão da entrega.");
+    }
+    // Re-obter revisão para próxima transição
+    const reGet = await fetch(`/api/entregas/${encodeURIComponent(entregaId)}/status`, {
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    const reDados = (await reGet.json()) as { revisao: string };
+    revisao = reDados.revisao;
+  }
+
+  const patchRes = await fetch(`/api/entregas/${encodeURIComponent(entregaId)}/status`, {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": csrf,
+    },
+    body: JSON.stringify({
+      acao,
+      revisaoEsperada: revisao,
+      ...(comentario ? { comentario } : {}),
+    }),
+  });
+
+  if (!patchRes.ok) {
+    const err = await patchRes.json().catch(() => null);
+    throw new Error(err?.message || "Não foi possível alterar o status da entrega.");
+  }
+
+  return (await patchRes.json()) as { entrega: { id: string; status: string } };
+}

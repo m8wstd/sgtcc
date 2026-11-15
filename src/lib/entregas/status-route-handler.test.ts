@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { UnauthorizedError } from "@/lib/auth/errors";
 import { EntregaError } from "./errors";
-import { createStatusPatchHandler } from "./status-route-handler";
+import { createStatusGetHandler, createStatusPatchHandler } from "./status-route-handler";
 import { sessaoTeste } from "./test-fixtures";
 
 vi.mock("@/lib/firebase/admin", () => ({ adminDb: null, adminAuth: null }));
@@ -71,5 +71,16 @@ describe("PATCH /api/entregas/[entregaId]/status", () => {
     const response = await handler(requisicao(), contexto);
     expect(response.status).toBe(status);
     expect(await response.json()).toEqual({ error: "TEST_ERROR", message: "Falha de teste." });
+  });
+});
+
+describe("GET /api/entregas/[entregaId]/status", () => {
+  it("retorna id, status e revisao da entrega", async () => {
+    const obterRevisao = vi.fn(async () => ({ id: "entrega-teste", status: "PRONTA_PARA_REVISAO", revisao: "100:200" }));
+    const getSession = vi.fn(async () => sessaoTeste());
+    const handler = createStatusGetHandler({ getSession, alterarStatus: vi.fn(), obterRevisao });
+    const response = await handler(new Request("http://localhost/api/entregas/entrega-teste/status"), contexto);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ id: "entrega-teste", status: "PRONTA_PARA_REVISAO", revisao: "100:200" });
   });
 });

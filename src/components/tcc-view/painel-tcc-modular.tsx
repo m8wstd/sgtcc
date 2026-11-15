@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -80,7 +80,9 @@ export function PainelTccModular({
 
   // Estado dinâmico de etapas sincronizado com a prop do servidor
   const [itens, setItens] = useState<ItemMarco[]>(itensIniciais);
-  useEffect(() => setItens(itensIniciais), [itensIniciais]);
+  React.useEffect(() => {
+    setItens(itensIniciais);
+  }, [itensIniciais, tcc.id]);
   const [mostrarCriarEtapa, setMostrarCriarEtapa] = useState(false);
   const [novoTituloEtapa, setNovoTituloEtapa] = useState("");
   const [novaDataLimite, setNovaDataLimite] = useState("30/11/2026");
@@ -193,21 +195,6 @@ export function PainelTccModular({
           </div>
         )}
       </div>
-
-      {/* Saudação */}
-      {saudacaoNome && (
-        <div className="border-b border-[#dfe2e8] pb-3">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
-            {isOrientador ? `Acompanhamento • ${tcc.alunoNome}` : `Olá, ${saudacaoNome}`}
-          </h1>
-          <p className="text-sm text-[#6b7385] mt-1">
-            {subtitulo ??
-              (isOrientador
-                ? "Clique no cartão da etapa para abrir a sala, postar materiais, orientar e avaliar."
-                : "Acompanhe o andamento do seu TCC. Clique no cartão da etapa para acessar a sala.")}
-          </p>
-        </div>
-      )}
 
       {/* Alerta de criação de etapa com sucesso */}
       {etapaCriadaSucesso && (
@@ -495,10 +482,10 @@ export function PainelTccModular({
                   ) : (
                     blocosDaColuna.map((item) => {
                       const idx = itens.indexOf(item);
-                      const slug = encodeURIComponent(item.marco.id);
+                      const slug = slugDoMarco(item.marco.titulo, idx);
                       const etapaHref = isOrientador
                         ? `/dashboard/tcc/${tcc.id}/etapa/${slug}`
-                        : `/dashboard/aluno/etapa/${slug}?tcc=${encodeURIComponent(tcc.id)}`;
+                        : `/dashboard/aluno/etapa/${slug}?tcc=${tcc.id}`;
                       const atrasado = item.statusEfetivo === "ATRASADA";
 
                       // Última postagem / feedback real ou descrição da etapa do cronograma
@@ -571,11 +558,15 @@ export function PainelTccModular({
             .map((item, idx) => {
             const { marco, statusEfetivo } = item;
             const statusLabel = ROTULO_STATUS_ENTREGA[statusEfetivo] ?? statusEfetivo;
-            const isConcluido = statusEfetivo === "CONCLUIDA";
-            const slug = encodeURIComponent(marco.id);
+            const slug = slugDoMarco(marco.titulo, idx);
             const etapaHref = isOrientador
               ? `/dashboard/tcc/${tcc.id}/etapa/${slug}`
-              : `/dashboard/aluno/etapa/${slug}?tcc=${encodeURIComponent(tcc.id)}`;
+              : `/dashboard/aluno/etapa/${slug}?tcc=${tcc.id}`;
+            const atrasado = statusEfetivo === "ATRASADA";
+
+            const ultimaPostagem = marco.postagens?.[marco.postagens.length - 1];
+            const ultimoFeedback = item.feedbacks?.[0];
+            const descricaoEtapa = marco.descricao;
 
             return (
               <Link
@@ -612,94 +603,13 @@ export function PainelTccModular({
                   </div>
                 </div>
 
-                <div className="p-5 sm:p-6 space-y-6">
-                  {/* Versões */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h5 className="text-xs font-bold text-[#111a2e] uppercase tracking-wider">
-                        Versões de Documentos Submetidas ({versoes.length})
-                      </h5>
-                      {!isOrientador && !isConcluido && (
-                        <Link
-                          href={etapaHref}
-                          className="text-xs font-medium text-[#1e78f0] flex items-center gap-1 cursor-pointer hover:underline"
-                        >
-                          <UploadCloud className="w-4 h-4" /> Nova versão na Sala
-                        </Link>
-                      )}
-                    </div>
-
-                    {versoes.length === 0 ? (
-                      <div className="p-4 rounded-lg border border-dashed border-[#dfe2e8] text-center bg-[#fafbfc]">
-                        <p className="text-xs text-[#6b7385]">
-                          Nenhum arquivo submetido para este marco ainda.
-                        </p>
-                      </div>
-                    ) : (
-                      <ul className="divide-y divide-[#dfe2e8] border border-[#dfe2e8] rounded-lg overflow-hidden bg-white">
-                        {versoes.map((v) => (
-                          <li
-                            key={v.id}
-                            className="px-4 py-3 flex items-center justify-between gap-4 hover:bg-[#f4f5f7] transition-colors"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <FileText className="w-4 h-4 text-[#1e78f0] shrink-0" />
-                              <div className="truncate">
-                                <span className="text-xs font-semibold text-[#111a2e]">
-                                  Versão {v.numeroVersao} &bull;{" "}
-                                  {decodeURIComponent(v.arquivoUrl.split("/").pop() ?? "arquivo").replace(/^v\d+_/, "")}
-                                </span>
-                                <span className="block text-[11px] text-[#6b7385]">
-                                  Enviado em {formatarDataHora(v.dataUpload)}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3 shrink-0">
-                              <a href={`/api/documentos/${encodeURIComponent(v.id)}`} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-[#1e78f0] hover:underline">Visualizar</a>
-                              <a href={`/api/documentos/${encodeURIComponent(v.id)}?download=1`} className="text-xs font-medium text-[#1e78f0] hover:underline">Baixar</a>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-
-                  {/* Feedbacks */}
-                  {entrega && (
-                    <div className="pt-2 border-t border-[#dfe2e8]">
-                      <div className="flex items-center gap-1.5 mb-3">
-                        <MessageSquare className="w-4 h-4 text-[#6b7385]" />
-                        <h5 className="text-xs font-bold text-[#111a2e] uppercase tracking-wider">
-                          Feedbacks e Orientações ({feedbacks.length})
-                        </h5>
-                      </div>
-
-                      {feedbacks.length === 0 ? (
-                        <p className="text-xs text-[#6b7385] italic">
-                          Nenhum feedback registrado ainda para este marco.
-                        </p>
-                      ) : (
-                        <div className="space-y-2.5">
-                          {feedbacks.map((f) => (
-                            <div
-                              key={f.id}
-                              className="p-3.5 rounded-lg bg-[#f4f5f7] border-l-4 border-[#1e78f0] space-y-1"
-                            >
-                              <div className="flex justify-between items-baseline text-[11px] text-[#6b7385]">
-                                <span className="font-semibold text-[#111a2e]">
-                                  {f.autorNome}
-                                </span>
-                                <span>{formatarDataHora(f.data)}</span>
-                              </div>
-                              <p className="text-xs text-[#111a2e]">{f.comentario}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
+                {/* Descrição objetiva da etapa cadastrada no cronograma */}
+                {descricaoEtapa && (
+                  <p className="mt-3 pt-3 border-t border-[#f0f2f5] text-xs text-[#6b7385] line-clamp-1">
+                    {descricaoEtapa}
+                  </p>
+                )}
+              </Link>
             );
           })}
         </div>

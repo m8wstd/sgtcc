@@ -41,11 +41,11 @@ describe("serviço RF04", () => {
     await expect(servico.alterarStatus("entrega-teste", sessaoTeste(), comando)).rejects.toMatchObject({ code: "SUBMISSION_NOT_CONFIRMED" });
     expect(gravacoes).toEqual([]);
   });
-  it("mantém ações bloqueadas até existir integração com RF03", async () => {
+  it("confirma com o confirmador padrão da RF03", async () => {
     const { repository, gravacoes, comando } = preparar();
     await expect(criarServicoEntregas(repository, confirmadorSubmissaoRF03).alterarStatus("entrega-teste", sessaoTeste(), comando))
-      .rejects.toMatchObject({ status: 503, code: "RF03_NOT_INTEGRATED" });
-    expect(gravacoes).toEqual([]);
+      .resolves.toMatchObject({ entrega: { status: "EM_REVISAO" } });
+    expect(gravacoes).toEqual([{ status: "EM_REVISAO" }]);
   });
   it("rejeita revisão concorrente obsoleta antes da confirmação", async () => {
     const { servico, confirmar, gravacoes, comando } = preparar();
