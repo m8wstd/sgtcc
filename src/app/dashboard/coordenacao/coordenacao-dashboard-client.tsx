@@ -46,10 +46,26 @@ export function CoordenacaoDashboardClient({
   // Mini Painel Acoplado de Ações da Coordenação
   const [painelAcaoAtivo, setPainelAcaoAtivo] = useState<PainelAcaoTipo>(null);
   const [alertaSucesso, setAlertaSucesso] = useState<string | null>(null);
+  const [alertaErro, setAlertaErro] = useState<string | null>(null);
+
+  // Lista de orientadores cadastrados no sistema
+  const [orientadoresSistema, setOrientadoresSistema] = useState<Array<{
+    id: string;
+    usuario_id: string;
+    nome: string;
+    email: string;
+  }>>([]);
+  const [carregandoOrientadores, setCarregandoOrientadores] = useState(false);
 
   // Estados dos formulários da coordenação
   const [trocaAlunoId, setTrocaAlunoId] = useState("");
+  const [trocaOrientadorId, setTrocaOrientadorId] = useState("");
   const [novoOrientadorNome, setNovoOrientadorNome] = useState("");
+  const [salvandoTroca, setSalvandoTroca] = useState(false);
+
+  // Estados da Alocação de Docentes
+  const [alocacaoMapeamento, setAlocacaoMapeamento] = useState<Record<string, string>>({});
+  const [salvandoAlocacao, setSalvandoAlocacao] = useState(false);
 
   const [cronograma, setCronograma] = useState<Array<{
     id: string;
@@ -67,6 +83,24 @@ export function CoordenacaoDashboardClient({
   const [excluirIds, setExcluirIds] = useState<string[]>([]);
   const [novoTitulo, setNovoTitulo] = useState("");
   const [novoPrazo, setNovoPrazo] = useState("");
+
+  // Carregar orientadores da API
+  const carregarOrientadores = React.useCallback(() => {
+    setCarregandoOrientadores(true);
+    fetch("/api/coordenacao/orientadores")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.orientadores && Array.isArray(data.orientadores)) {
+          setOrientadoresSistema(data.orientadores);
+        }
+      })
+      .catch((err) => console.error("Falha ao carregar orientadores:", err))
+      .finally(() => setCarregandoOrientadores(false));
+  }, []);
+
+  React.useEffect(() => {
+    carregarOrientadores();
+  }, [carregarOrientadores]);
 
   // Carregar cronograma real da API
   React.useEffect(() => {
@@ -186,11 +220,11 @@ export function CoordenacaoDashboardClient({
       return { rotulo: "Reprovado", bg: "bg-[#ff7f7f]", text: "text-[#111a2e]" };
     }
     if (tcc.statusGeral === "AGUARDANDO_BANCA") {
-      return { rotulo: "Aguardando banca", bg: "bg-[#8ec5ff]", text: "text-[#111a2e]" };
+      return { rotulo: "Aguardando banca", bg: "bg-[#d8b4fe]", text: "text-[#111a2e]" };
     }
     // EM_ANDAMENTO — detectar sub-estado
     if (tcc.statusGeral === "EM_ANDAMENTO") {
-      // Atrasada (heurística atual do sistema)
+      // Atrasada
       if (tcc.id.includes("maria")) {
         return { rotulo: "Entrega atrasada", bg: "bg-[#ff7f7f]", text: "text-[#111a2e]" };
       }
@@ -200,9 +234,9 @@ export function CoordenacaoDashboardClient({
       }
       // Aguardando envio
       if (!tcc.versaoFinalUrl || tcc.fase === 1) {
-        return { rotulo: "Aguardando envio", bg: "bg-[#d5d9e0]", text: "text-[#111a2e]" };
+        return { rotulo: "Aguardando envio", bg: "bg-[#a5b4fc]", text: "text-[#111a2e]" };
       }
-      return { rotulo: "Em andamento", bg: "bg-[#ffd84d]", text: "text-[#111a2e]" };
+      return { rotulo: "Em andamento", bg: "bg-[#8ec5ff]", text: "text-[#111a2e]" };
     }
     return { rotulo: tcc.statusGeral, bg: "bg-[#d5d9e0]", text: "text-[#111a2e]" };
   }
@@ -293,19 +327,132 @@ export function CoordenacaoDashboardClient({
     });
   }, [tccs, statusFiltro, cursoFiltro, faseFiltro, busca]);
 
-  const handleSalvarTroca = (e: React.FormEvent) => {
+  const handleSalvarTroca = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!trocaAlunoId || !novoOrientadorNome.trim()) return;
+    if (!trocaAlunoId) return;
 
-    setTccs(
-      tccs.map((t) =>
-        t.id === trocaAlunoId ? { ...t, orientadorNome: novoOrientadorNome.trim() } : t
-      )
-    );
-    setPainelAcaoAtivo(null);
-    setNovoOrientadorNome("");
-    setAlertaSucesso("Orientador reatribuído com sucesso! Histórico acadêmico preservado.");
-    setTimeout(() => setAlertaSucesso(null), 5000);
+    // Obtém o nome e id do novo docente
+    let docId = trocaOrientadorId;
+    let nomeDocente = novoOrientadorNome.trim();
+
+    if (docId) {
+      const achado = orientadoresSistema.find((o) => o.id === docId || o.usuario_id === docId);
+      if (achado) {
+        nomeDocente = achado.nome;
+      }
+    } else if (nomeDocente) {
+      const achado = orientadoresSistema.find(
+        (o) => o.nome.toLowerCase() === nomeDocente.toLowerCase()
+      );
+      if (achado) {
+        docId = achado.id;
+        nomeDocente = achado.nome;
+      }
+    }
+
+    if (!docId && !nomeDocente) {
+      setAlertaErro("Selecione ou informe um professor orientador.");
+      return;
+    }
+
+    setSalvandoTroca(true);
+    setAlertaErro(null);
+
+    try {
+      const res = await fetch("/api/coordenacao/orientadores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tccId: trocaAlunoId,
+          novoOrientadorId: docId || undefined,
+          novoOrientadorNome: nomeDocente,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Não foi possível transferir o orientador.");
+      }
+
+      const nomeAtualizado = data?.novoOrientadorNome || nomeDocente;
+
+      setTccs((prev) =>
+        prev.map((t) =>
+          t.id === trocaAlunoId ? { ...t, orientadorNome: nomeAtualizado, orientador_id: data?.novoOrientadorId || t.orientador_id } : t
+        )
+      );
+      setPainelAcaoAtivo(null);
+      setTrocaAlunoId("");
+      setTrocaOrientadorId("");
+      setNovoOrientadorNome("");
+      setAlertaSucesso("Orientador reatribuído com sucesso! Histórico acadêmico e entregas preservados.");
+      setTimeout(() => setAlertaSucesso(null), 5000);
+      carregarOrientadores();
+    } catch (err) {
+      setAlertaErro(err instanceof Error ? err.message : "Erro ao efetivar transferência.");
+      setTimeout(() => setAlertaErro(null), 5000);
+    } finally {
+      setSalvandoTroca(false);
+    }
+  };
+
+  const handleSalvarAlocacaoLote = async () => {
+    const alocacoesParaEnviar = Object.entries(alocacaoMapeamento)
+      .filter(([_, orientadorId]) => Boolean(orientadorId))
+      .map(([tccId, orientadorId]) => {
+        const doc = orientadoresSistema.find((o) => o.id === orientadorId || o.usuario_id === orientadorId);
+        return {
+          tccId,
+          orientadorId,
+          orientadorNome: doc?.nome,
+        };
+      });
+
+    if (alocacoesParaEnviar.length === 0) {
+      setAlertaErro("Nenhuma alteração de docente selecionada para alocação.");
+      setTimeout(() => setAlertaErro(null), 4000);
+      return;
+    }
+
+    setSalvandoAlocacao(true);
+    setAlertaErro(null);
+
+    try {
+      const res = await fetch("/api/coordenacao/alocacao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ alocacoes: alocacoesParaEnviar }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(data?.message || "Falha ao salvar alocação em lote.");
+      }
+
+      // Atualiza o estado local
+      setTccs((prev) =>
+        prev.map((t) => {
+          const novaAloc = alocacoesParaEnviar.find((a) => a.tccId === t.id);
+          if (novaAloc && novaAloc.orientadorNome) {
+            return { ...t, orientadorNome: novaAloc.orientadorNome, orientador_id: novaAloc.orientadorId };
+          }
+          return t;
+        })
+      );
+
+      setAlocacaoMapeamento({});
+      setPainelAcaoAtivo(null);
+      setAlertaSucesso(data?.message || "Alocações de docentes atualizadas com sucesso!");
+      setTimeout(() => setAlertaSucesso(null), 5000);
+      carregarOrientadores();
+    } catch (err) {
+      setAlertaErro(err instanceof Error ? err.message : "Erro ao alocar docentes.");
+      setTimeout(() => setAlertaErro(null), 5000);
+    } finally {
+      setSalvandoAlocacao(false);
+    }
   };
 
   const alternarPainelAcao = (tipo: PainelAcaoTipo) => {
@@ -331,6 +478,18 @@ export function CoordenacaoDashboardClient({
         </div>
       )}
 
+      {alertaErro && (
+        <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs font-medium flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{alertaErro}</span>
+          </div>
+          <button type="button" onClick={() => setAlertaErro(null)} className="text-red-700 hover:text-red-900 cursor-pointer">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Cards de Métricas da Coordenação com Atalhos Interativos */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         <StatCard
@@ -345,7 +504,7 @@ export function CoordenacaoDashboardClient({
         <StatCard
           label="Em Andamento"
           value={stats.emAndamento}
-          variant="yellow"
+          variant="blue"
           className="p-4"
           onClick={() => { setStatusFiltro(statusFiltro === "EM_ANDAMENTO" ? "todos" : "EM_ANDAMENTO"); setVistaAtiva("tccs"); }}
           active={statusFiltro === "EM_ANDAMENTO" && vistaAtiva === "tccs"}
@@ -353,7 +512,7 @@ export function CoordenacaoDashboardClient({
         <StatCard
           label="Aguardando Envio"
           value={stats.aguardandoEnvio}
-          variant="neutral"
+          variant="indigo"
           icon={<Clock className="w-4 h-4" />}
           className="p-4"
           onClick={() => { setStatusFiltro(statusFiltro === "AGUARDANDO_ENVIO" ? "todos" : "AGUARDANDO_ENVIO"); setVistaAtiva("tccs"); }}
@@ -371,7 +530,7 @@ export function CoordenacaoDashboardClient({
         <StatCard
           label="Aguardando Banca"
           value={stats.aguardandoBanca}
-          variant="neutral"
+          variant="purple"
           className="p-4"
           onClick={() => { setStatusFiltro(statusFiltro === "AGUARDANDO_BANCA" ? "todos" : "AGUARDANDO_BANCA"); setVistaAtiva("tccs"); }}
           active={statusFiltro === "AGUARDANDO_BANCA" && vistaAtiva === "tccs"}
@@ -498,6 +657,62 @@ export function CoordenacaoDashboardClient({
               <div className="p-3 bg-white rounded-xl border border-[#dfe2e8]">
                 <span className="text-[#6b7385] block">Gestão de Vínculos</span>
                 <b className="text-sm text-emerald-700">Fluxo Institucional Regular</b>
+              </div>
+            </div>
+
+            {/* Tabela de Alocação de Docentes */}
+            <div className="bg-white rounded-xl border border-[#dfe2e8] overflow-hidden shadow-2xs">
+              <div className="p-3 bg-[#f8f9fa] border-b border-[#dfe2e8] flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-[#111a2e]">TCCs e Alocação de Docente</h4>
+                  <p className="text-[11px] text-[#6b7385]">Selecione o orientador responsável para cada trabalho e confirme a alocação.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSalvarAlocacaoLote}
+                  disabled={salvandoAlocacao || Object.keys(alocacaoMapeamento).length === 0}
+                  className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
+                >
+                  {salvandoAlocacao ? "Salvando Alocações..." : "Salvar Alocações"}
+                </button>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto divide-y divide-[#dfe2e8]">
+                {tccs.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-[#6b7385]">Nenhum TCC para alocação.</div>
+                ) : (
+                  tccs.map((t) => (
+                    <div key={t.id} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs hover:bg-[#fafbfc]">
+                      <div className="min-w-0 flex-1">
+                        <b className="text-[#111a2e] block truncate">{t.alunoNome}</b>
+                        <p className="text-[11px] text-[#6b7385] truncate">{t.titulo}</p>
+                        <span className="text-[10px] text-[#6b7385]">{t.curso ?? "Curso Padrão"} &bull; {t.fase ? `TCC ${t.fase}` : "TCC 1"}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[11px] text-[#6b7385] hidden md:inline">Orientador:</span>
+                        <select
+                          value={alocacaoMapeamento[t.id] ?? t.orientador_id}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setAlocacaoMapeamento((prev) => ({ ...prev, [t.id]: val }));
+                          }}
+                          className="px-2.5 py-1.5 text-xs border border-[#dfe2e8] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#1e78f0] min-w-[200px]"
+                        >
+                          {orientadoresSistema.length > 0 ? (
+                            orientadoresSistema.map((o) => (
+                              <option key={o.id} value={o.id}>
+                                {o.nome}
+                              </option>
+                            ))
+                          ) : (
+                            <option value={t.orientador_id}>{t.orientadorNome}</option>
+                          )}
+                        </select>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -794,7 +1009,7 @@ export function CoordenacaoDashboardClient({
                   <option value="">Selecione um aluno...</option>
                   {tccs.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.alunoNome} — {t.titulo} (Orientador: {t.orientadorNome})
+                      {t.alunoNome} — {t.titulo} (Orientador Atual: {t.orientadorNome})
                     </option>
                   ))}
                 </select>
@@ -802,22 +1017,42 @@ export function CoordenacaoDashboardClient({
 
               <div>
                 <label className="block text-xs font-semibold text-[#111a2e] mb-1">
-                  Nome do Novo Professor Orientador
+                  Novo Professor Orientador
                 </label>
-                <input
-                  type="text"
-                  value={novoOrientadorNome}
-                  onChange={(e) => setNovoOrientadorNome(e.target.value)}
-                  placeholder="Ex: Prof. Dr. Carlos Eduardo"
-                  required
-                  className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
-                />
+                {orientadoresSistema.length > 0 ? (
+                  <select
+                    value={trocaOrientadorId}
+                    onChange={(e) => {
+                      setTrocaOrientadorId(e.target.value);
+                      const achado = orientadoresSistema.find((o) => o.id === e.target.value || o.usuario_id === e.target.value);
+                      if (achado) setNovoOrientadorNome(achado.nome);
+                    }}
+                    required
+                    className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
+                  >
+                    <option value="">Selecione um docente...</option>
+                    {orientadoresSistema.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.nome} {o.email ? `(${o.email})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={novoOrientadorNome}
+                    onChange={(e) => setNovoOrientadorNome(e.target.value)}
+                    placeholder="Ex: Prof. Dr. Carlos Eduardo"
+                    required
+                    className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
+                  />
+                )}
               </div>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
               <p className="text-[11px] text-[#6b7385]">
-                <b>Garantia Institucional:</b> O novo orientador terá acesso imediato à sala e às avaliações já feitas.
+                <b>Garantia Institucional (RF05):</b> O novo orientador terá acesso imediato à sala e a todo o histórico de entregas e versões.
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -829,9 +1064,10 @@ export function CoordenacaoDashboardClient({
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
+                  disabled={salvandoTroca}
+                  className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
                 >
-                  Efetivar Reatribuição
+                  {salvandoTroca ? "Reatribuindo..." : "Efetivar Reatribuição"}
                 </button>
               </div>
             </div>

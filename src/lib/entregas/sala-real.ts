@@ -29,7 +29,7 @@ export function montarSalaReal(item: ItemMarco): SalaEtapaTcc {
       arquivoNome: nomeExibicaoDoArquivo(v.arquivoUrl),
       data: new Date(String(v.dataUpload)).toLocaleString("pt-BR"),
       status: statusKanban,
-      notaOuParecer: item.feedbacks[idx]?.comentario ?? (idx === 0 ? item.feedbacks[0]?.comentario : undefined),
+      notaOuParecer: idx === 0 ? item.feedbacks[0]?.comentario : undefined,
     })),
   };
 }
