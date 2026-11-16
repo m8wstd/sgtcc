@@ -212,11 +212,11 @@ async function salvarVercelBlob(
     });
 
     if (entregaJaExiste) {
-      batch.update(entregaRef, { dataSubmissao: agora });
+      batch.update(entregaRef, { dataSubmissao: agora, status: "PRONTA_PARA_REVISAO" });
     } else {
       batch.create(entregaRef, {
         id: entregaId,
-        status: "AGUARDANDO_ENVIO",
+        status: "PRONTA_PARA_REVISAO",
         dataSubmissao: agora,
         marco_id: marco.id,
         tcc_id: tccId,

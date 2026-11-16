@@ -404,7 +404,7 @@ export function PainelTccModular({
           {isOrientador && !mostrarCriarEtapa && (
             <button
               type="button"
-              onClick={() => setMostrarCriarEtapa(true)}
+              onClick={() => { setMostrarCriarEtapa(true); window.scrollTo({ top: 0, behavior: "smooth" }); }}
               className="px-3.5 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
             >
               <PlusCircle className="w-4 h-4" />

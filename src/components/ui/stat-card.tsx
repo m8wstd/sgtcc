@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 export interface StatCardProps {
   label: string;
   value: string | number;
-  variant?: "primary" | "navy" | "blue" | "yellow" | "green" | "red" | "neutral";
+  variant?: "primary" | "navy" | "blue" | "yellow" | "green" | "red" | "neutral" | "purple" | "indigo" | "teal" | "amber" | "orange";
   className?: string;
   icon?: React.ReactNode;
   onClick?: () => void;
@@ -20,6 +20,11 @@ const variantStyles = {
   green: "bg-[#86d994]/70 border-[#6bc77b]/80 text-[#111a2e]",
   red: "bg-[#ff7f7f]/70 border-[#f46868]/80 text-[#111a2e]",
   neutral: "bg-[#d5d9e0]/70 border-[#c0c5cd]/80 text-[#111a2e]",
+  purple: "bg-[#d8b4fe]/70 border-[#c084fc]/80 text-[#111a2e]",
+  indigo: "bg-[#a5b4fc]/70 border-[#818cf8]/80 text-[#111a2e]",
+  teal: "bg-[#99f6e4]/70 border-[#5eead4]/80 text-[#111a2e]",
+  amber: "bg-[#fcd34d]/70 border-[#f59e0b]/80 text-[#111a2e]",
+  orange: "bg-[#fdba74]/70 border-[#fb923c]/80 text-[#111a2e]",
 };
 
 export function StatCard({

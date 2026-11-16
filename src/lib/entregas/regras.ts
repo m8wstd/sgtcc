@@ -93,10 +93,12 @@ export function caminhoStorage(
   return `tccs/${tccId}/entregas/${entregaId}/v${numeroVersao}_${nomeSeguro}`;
 }
 
-/** Nome para exibição a partir do caminho: remove diretórios e o prefixo "v<n>_". */
+/** Nome para exibição a partir do caminho: remove diretórios, prefixo "v<n>_" e sufixos aleatórios do Vercel Blob. */
 export function nomeExibicaoDoArquivo(caminho: string): string {
   const nome = decodeURIComponent(caminho.split("/").pop() ?? caminho);
-  return nome.replace(/^v\d+_/, "").replace(/^[a-f0-9-]{36}_/i, "");
+  const semPrefixo = nome.replace(/^v\d+_/, "").replace(/^[a-f0-9-]{36}_/i, "");
+  // Remove o sufixo aleatório adicionado pelo Vercel Blob (ex: "-sqOfizZW5ao0FAwubmcRQgrWdQqwxh.pdf")
+  return semPrefixo.replace(/-[A-Za-z0-9_-]{20,}(\.[a-zA-Z0-9]+)$/, "$1");
 }
 
 export type PermissaoEnvio =

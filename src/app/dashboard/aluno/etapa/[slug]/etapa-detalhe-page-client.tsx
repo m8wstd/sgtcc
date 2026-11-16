@@ -343,7 +343,7 @@ export function SalaEtapaPageClient({ etapa, nomeAluno }: SalaEtapaPageClientPro
                   {arquivoUpload ? arquivoUpload.name : "Clique para selecionar o arquivo da etapa"}
                 </span>
                 <span className="text-xs text-[#6b7385] block">
-                  Formatos aceitos: exclusivamente <b className="text-[#111a2e]">.pdf</b> e <b className="text-[#111a2e]">.docx</b> (Regra US03)
+                  Formatos aceitos: exclusivamente <b className="text-[#111a2e]">.pdf</b> e <b className="text-[#111a2e]">.docx</b>
                 </span>
               </label>
             </div>

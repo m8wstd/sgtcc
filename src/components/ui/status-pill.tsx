@@ -6,7 +6,7 @@ export interface StatusPillProps {
   className?: string;
 }
 
-export function getStatusVariant(status: string): "green" | "yellow" | "red" | "blue" | "neutral" {
+export function getStatusVariant(status: string): "green" | "yellow" | "red" | "blue" | "neutral" | "purple" | "indigo" | "teal" | "amber" | "orange" {
   const s = status.toLowerCase();
   if (
     s.includes("conclu") ||
@@ -16,6 +16,12 @@ export function getStatusVariant(status: string): "green" | "yellow" | "red" | "
     s.includes("avaliada")
   ) {
     return "green";
+  }
+  if (
+    s.includes("aguardando envio") ||
+    s.includes("sem entrega")
+  ) {
+    return "indigo";
   }
   if (
     s.includes("revis") ||
@@ -36,9 +42,13 @@ export function getStatusVariant(status: string): "green" | "yellow" | "red" | "
     return "red";
   }
   if (
-    s.includes("andamento") ||
     s.includes("banca") ||
-    s.includes("defendid") ||
+    s.includes("defendid")
+  ) {
+    return "purple";
+  }
+  if (
+    s.includes("andamento") ||
     s.includes("em avalia")
   ) {
     return "blue";
@@ -52,6 +62,11 @@ const pillVariantStyles = {
   red: "bg-[#ff7f7f] text-[#111a2e]",
   blue: "bg-[#8ec5ff] text-[#111a2e]",
   neutral: "bg-[#d5d9e0] text-[#111a2e]",
+  purple: "bg-[#d8b4fe] text-[#111a2e]",
+  indigo: "bg-[#a5b4fc] text-[#111a2e]",
+  teal: "bg-[#99f6e4] text-[#111a2e]",
+  amber: "bg-[#fcd34d] text-[#111a2e]",
+  orange: "bg-[#fdba74] text-[#111a2e]",
 };
 
 export function StatusPill({ status, className }: StatusPillProps) {
