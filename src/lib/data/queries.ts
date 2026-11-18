@@ -210,15 +210,25 @@ export async function getPainelTcc(sessao: AuthenticatedSession, tccId: string):
   const registro = await getTccAccessRecord(tccId, sessao);
   if (!registro || !canAccessTcc(sessao, registro.tcc, registro.context)) return null;
 
-  const [marcosSnap, entregas] = await Promise.all([
+  const [marcosSnap, entregas, salasSnap] = await Promise.all([
     db().collection("marcos_cronograma").get(),
     db().collection("entregas").where("tcc_id", "==", tccId).get().then((s) => docs<Entrega>(s)),
+    db().collection("etapas_sala").get(),
   ]);
   const todosMarcos = docs<MarcoCronograma>(marcosSnap).sort((a, b) => {
     if (a.ordem !== undefined && b.ordem !== undefined) {
       return a.ordem - b.ordem;
     }
     return tempo(a.dataLimite) - tempo(b.dataLimite);
+  });
+
+  // Mapeia customizações da sala de cada marco para este TCC
+  const salasCustomizadas = new Map<string, { statusCustomizado?: string }>();
+  salasSnap.docs.forEach((d) => {
+    if (d.id.startsWith(`${tccId}__`)) {
+      const marcoId = d.id.slice(`${tccId}__`.length);
+      salasCustomizadas.set(marcoId, d.data() as { statusCustomizado?: string });
+    }
   });
 
   // Filtra marcos pela fase do TCC se o marco tiver 'fase' definida
@@ -241,10 +251,14 @@ export async function getPainelTcc(sessao: AuthenticatedSession, tccId: string):
 
   const itens: ItemMarco[] = marcos.map((marco) => {
     const entrega = entregas.find((e) => e.marco_id === marco.id) ?? null;
+    const salaCustom = salasCustomizadas.get(marco.id);
+    const statusCalculado = statusEfetivo(marco, entrega);
+    const statusFinal = (salaCustom?.statusCustomizado as StatusEntrega) ?? statusCalculado;
+
     return {
       marco,
       entrega,
-      statusEfetivo: statusEfetivo(marco, entrega),
+      statusEfetivo: statusFinal,
       versoes: versoes
         .filter((v) => v.entrega_id === entrega?.id && /^https:\/\/[^/]+\.(public|private)\.blob\.vercel-storage\.com\//i.test(v.arquivoUrl))
         .sort((a, b) => b.numeroVersao - a.numeroVersao),
