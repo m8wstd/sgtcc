@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, Settings, LogOut, Check, X, Shield, User } from "lucide-react";
 import { ROTULO_PERFIL, homeDoPerfil } from "@/lib/auth/perfis";
-import type { PerfilEnum } from "@/types";
+import { PerfilEnum } from "@/types";
 
 interface DashboardHeaderProps {
   usuario: {
@@ -342,6 +342,7 @@ export function DashboardHeader({ usuario }: DashboardHeaderProps) {
 
                   {/* Ações do Menu */}
                   <div className="space-y-1">
+
                     <button
                       type="button"
                       onClick={() => {

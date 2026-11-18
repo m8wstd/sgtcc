@@ -25,6 +25,7 @@ import {
 interface AvaliadorDashboardClientProps {
   nomeAvaliador: string;
   tccs: TccBanca[];
+  ocultarCabecalho?: boolean;
 }
 
 // ── Colunas do Kanban: etapa do TCC do ponto de vista deste avaliador ───────
@@ -58,7 +59,7 @@ function ResumoAvaliacao({ t }: { t: TccBanca }) {
   );
 }
 
-export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashboardClientProps) {
+export function AvaliadorDashboardClient({ nomeAvaliador, tccs, ocultarCabecalho }: AvaliadorDashboardClientProps) {
   const semestresDisponiveis = useMemo(() => {
     const setS = new Set<string>();
     setS.add(semestreAtual());
@@ -71,6 +72,7 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
   const [semestreAtivo, setSemestreAtivo] = useState<string>(semestreAtual());
   const [busca, setBusca] = useState("");
   const [tabFase, setTabFase] = useState<"todas" | "1" | "2">("todas");
+  const [cursoAtivo, setCursoAtivo] = useState<string>("todos");
   const [filtroEtapa, setFiltroEtapa] = useState<EtapaBanca | "todas">("todas");
   const [exibirAvaliadasKanban, setExibirAvaliadasKanban] = useState(false);
   const [exibirAguardandoEnvio, setExibirAguardandoEnvio] = useState(false);
@@ -79,6 +81,14 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
   const tccsDoSemestre = useMemo(() => {
     return tccs.filter((t) => derivarSemestreTcc(t) === semestreAtivo);
   }, [tccs, semestreAtivo]);
+
+  const cursosDisponiveis = useMemo(() => {
+    const setC = new Set<string>();
+    tccsDoSemestre.forEach((t) => {
+      if (t.curso) setC.add(t.curso);
+    });
+    return Array.from(setC);
+  }, [tccsDoSemestre]);
 
   const stats = useMemo(() => {
     const conta = (e: EtapaBanca) => tccsDoSemestre.filter((t) => t.etapa === e).length;
@@ -95,6 +105,7 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
     const termo = busca.trim().toLowerCase();
     return tccsDoSemestre.filter((t) => {
       const matchFase = tabFase === "todas" ? true : tabFase === "1" ? t.fase === 1 || !t.fase : t.fase === 2;
+      const matchCurso = cursoAtivo === "todos" ? true : t.curso === cursoAtivo;
       const matchEtapa = filtroEtapa === "todas" || t.etapa === filtroEtapa;
       const matchBusca =
         !termo ||
@@ -102,19 +113,21 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
         t.alunoNome.toLowerCase().includes(termo) ||
         t.aluno_id.toLowerCase().includes(termo) ||
         t.orientadorNome.toLowerCase().includes(termo);
-      return matchFase && matchEtapa && matchBusca;
+      return matchFase && matchCurso && matchEtapa && matchBusca;
     });
-  }, [tccsDoSemestre, tabFase, filtroEtapa, busca]);
+  }, [tccsDoSemestre, tabFase, cursoAtivo, filtroEtapa, busca]);
 
   return (
     <div className="space-y-6 w-full">
-      <div className="border-b border-[#dfe2e8] pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
+      {!ocultarCabecalho && (
+        <div className="mb-4">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">Olá, Prof. {nomeAvaliador}</h1>
           <p className="text-sm text-[#6b7385] mt-1">
             Trabalhos em que você participa da banca examinadora (TCC 1 e TCC 2), ordenados pela defesa mais próxima.
           </p>
         </div>
+      )}
+      <div className={`flex justify-end pb-4 ${!ocultarCabecalho ? "border-b border-[#dfe2e8] mb-6" : "mb-4"}`}>
         <SemestreSelector
           semestreAtivo={semestreAtivo}
           semestresDisponiveis={semestresDisponiveis}
@@ -184,28 +197,55 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
         />
       </div>
 
-      {/* Controles */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
-            <span className="text-[11px] font-semibold text-[#6b7385] px-2">Fase:</span>
-            {(["todas", "1", "2"] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => setTabFase(f)}
-                className={`px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                  tabFase === f
-                    ? f === "todas"
-                      ? "bg-[#0f1b33] text-white shadow-xs"
-                      : "bg-[#1e78f0] text-white shadow-xs"
-                    : "text-[#111a2e] hover:bg-white"
-                }`}
-              >
-                {f === "todas" ? "Todas" : `TCC ${f}`}
-              </button>
-            ))}
+      {/* Barra de Filtros e Busca no mesmo alinhamento do Orientador */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Abas TCC 1 vs TCC 2 */}
+          <div className="flex items-center gap-1 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
+            <button
+              type="button"
+              onClick={() => setTabFase("todas")}
+              className={`px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                tabFase === "todas" ? "bg-[#0f1b33] text-white shadow-xs" : "text-[#111a2e] hover:bg-white"
+              }`}
+            >
+              Todas as Fases
+            </button>
+            <button
+              type="button"
+              onClick={() => setTabFase("1")}
+              className={`px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                tabFase === "1" ? "bg-[#1e78f0] text-white shadow-xs" : "text-[#111a2e] hover:bg-white"
+              }`}
+            >
+              TCC 1
+            </button>
+            <button
+              type="button"
+              onClick={() => setTabFase("2")}
+              className={`px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                tabFase === "2" ? "bg-[#1e78f0] text-white shadow-xs" : "text-[#111a2e] hover:bg-white"
+              }`}
+            >
+              TCC 2
+            </button>
           </div>
+
+          {/* Filtro por Curso */}
+          {cursosDisponiveis.length > 0 && (
+            <select
+              value={cursoAtivo}
+              onChange={(e) => setCursoAtivo(e.target.value)}
+              className="text-xs bg-white border border-[#dfe2e8] rounded-lg px-3 py-1.5 font-medium text-[#111a2e] focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
+            >
+              <option value="todos">Todos os Cursos</option>
+              {cursosDisponiveis.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
 
           {filtroEtapa !== "todas" && (
             <button
@@ -222,8 +262,9 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
           )}
         </div>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
-          <div className="relative w-full sm:w-64 min-w-[200px]">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+          {/* Busca */}
+          <div className="relative flex-1 sm:w-64 min-w-[200px]">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#6b7385]" />
             <input
               type="text"
@@ -232,6 +273,37 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
               onChange={(e) => setBusca(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 text-xs bg-[#f4f5f7] border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0] focus:bg-white text-[#111a2e]"
             />
+          </div>
+
+          {/* Alternadores de Visão de Colunas (alinhados igual ao Orientador) */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setExibirAguardandoEnvio((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                exibirAguardandoEnvio
+                  ? "bg-[#d5d9e0] text-[#111a2e] border-[#c0c5cd]"
+                  : "bg-white text-[#6b7385] border-[#dfe2e8] hover:text-[#111a2e]"
+              }`}
+              title="Exibir/ocultar coluna Aguardando Envio"
+            >
+              {exibirAguardandoEnvio ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              <span>Aguardando Envio ({stats.aguardandoEnvio})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setExibirAvaliadasKanban((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                exibirAvaliadasKanban
+                  ? "bg-[#86d994] text-[#111a2e] border-[#72c27f]"
+                  : "bg-white text-[#6b7385] border-[#dfe2e8] hover:text-[#111a2e]"
+              }`}
+              title="Exibir/ocultar coluna Avaliadas"
+            >
+              {exibirAvaliadasKanban ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              <span>Avaliadas ({stats.avaliadas})</span>
+            </button>
           </div>
         </div>
       </div>
@@ -242,39 +314,6 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Barra de alternância para colunas secundárias/concluídas */}
-          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-            <span className="text-xs text-[#6b7385]">
-              Mostrando colunas de ação imediata. Concluídas e pendências de envio podem ser expandidas abaixo:
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setExibirAguardandoEnvio((prev) => !prev)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
-                  exibirAguardandoEnvio
-                    ? "bg-[#d5d9e0] text-[#111a2e] border-[#c0c5cd]"
-                    : "bg-white text-[#6b7385] border-[#dfe2e8] hover:text-[#111a2e]"
-                }`}
-              >
-                <Clock className="w-3.5 h-3.5" />
-                <span>Aguardando Envio ({stats.aguardandoEnvio})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setExibirAvaliadasKanban((prev) => !prev)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
-                  exibirAvaliadasKanban
-                    ? "bg-emerald-600 text-white border-emerald-600"
-                    : "bg-white text-[#6b7385] border-[#dfe2e8] hover:text-[#111a2e]"
-                }`}
-              >
-                {exibirAvaliadasKanban ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                <span>Coluna &quot;Avaliadas&quot; ({stats.avaliadas})</span>
-              </button>
-            </div>
-          </div>
 
           <div className="w-full pb-4">
             {/* Grid flexível: Em telas pequenas empilha ordenadamente em coluna única limpa; em md+ vira colunas lado a lado */}

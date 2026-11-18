@@ -10,8 +10,8 @@ const context = { params: Promise.resolve({ tccId: "tcc-001" }) };
 
 const sessaoAvaliador = {
   uid: "uid-silvia",
-  perfil: PerfilEnum.AVALIADOR,
-  usuario: { id: "uid-silvia", nome: "Silvia", email: "silvia@teste.sgtcc.dev", perfil: PerfilEnum.AVALIADOR },
+  perfil: PerfilEnum.ORIENTADOR,
+  usuario: { id: "uid-silvia", nome: "Silvia", email: "silvia@teste.sgtcc.dev", perfil: PerfilEnum.ORIENTADOR },
   token: {} as never,
 };
 const sessaoAluno = {

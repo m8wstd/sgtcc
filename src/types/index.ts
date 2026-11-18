@@ -74,6 +74,7 @@ export interface TCC {
   /** Data/hora da defesa (usada pelo painel da banca para ordenar e alertar). */
   defesaEm?: Date | string;
   aluno_id: string;
+  alunos_ids?: string[];
   orientador_id: string;
 }
 

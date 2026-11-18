@@ -122,31 +122,37 @@ export async function listarTccsVisiveis(sessao: AuthenticatedSession): Promise<
     case PerfilEnum.ALUNO: {
       const aluno = await buscarPorUsuario("alunos", usuarioId);
       if (!aluno) return [];
-      lista = docs<TCC>(await tccs.where("aluno_id", "==", aluno.data().matricula ?? aluno.id).get());
+      const mat = aluno.data().matricula ?? aluno.id;
+      const [snap1, snap2] = await Promise.all([
+        tccs.where("aluno_id", "==", mat).get(),
+        tccs.where("alunos_ids", "array-contains", mat).get(),
+      ]);
+      const mapa = new Map<string, TCC>();
+      docs<TCC>(snap1).forEach((t) => mapa.set(t.id, t));
+      docs<TCC>(snap2).forEach((t) => mapa.set(t.id, t));
+      lista = Array.from(mapa.values());
       break;
     }
-    case PerfilEnum.ORIENTADOR: {
-      const prof = await buscarPorUsuario("professores_orientadores", usuarioId);
-      if (!prof) return [];
-      // Busca tanto pelo id do documento em professores_orientadores quanto pelo usuario_id
-      const idsBusca = [...new Set([prof.id, usuarioId])];
-      const snap = await tccs.where("orientador_id", "in", idsBusca).get();
-      lista = docs<TCC>(snap);
-      break;
-    }
+    case PerfilEnum.ORIENTADOR:
     case PerfilEnum.AVALIADOR: {
-      const prof = await buscarPorUsuario("professores_avaliadores", usuarioId);
-      if (!prof) return [];
-      const bancas = docs<BancaAvaliacao>(
-        await db().collection("bancas_avaliacao").where("avaliador_id", "==", prof.id).get(),
-      );
-      const porTcc = await porIds<TCC>("tccs", bancas.map((b) => b.tcc_id));
-      lista = [...porTcc.values()];
+      const profOrient = await buscarPorUsuario("professores_orientadores", usuarioId);
+      const orientId = profOrient?.id;
+      const idsBusca = [...new Set([orientId, usuarioId].filter(Boolean))];
+
+      if (idsBusca.length > 0) {
+        const snap = await tccs.where("orientador_id", "in", idsBusca).get();
+        lista = docs<TCC>(snap);
+      } else {
+        lista = [];
+      }
       break;
     }
     case PerfilEnum.COORDENACAO: {
       const coord = await buscarPorUsuario("coordenadores", usuarioId);
-      const cursosPermitidos: string[] = coord?.data()?.cursos ?? [];
+      const uDoc = await db().collection("usuarios").doc(usuarioId).get();
+      const uData = uDoc.data();
+      const cursosPermitidos: string[] =
+        coord?.data()?.cursos ?? uData?.cursosCoordenados ?? uData?.cursos ?? [];
       const todosTccs = docs<TCC>(await tccs.get());
       if (cursosPermitidos && cursosPermitidos.length > 0) {
         lista = todosTccs.filter((t) => t.curso && cursosPermitidos.includes(t.curso));
@@ -164,19 +170,36 @@ export async function listarTccsVisiveis(sessao: AuthenticatedSession): Promise<
 
 /** Acrescenta nome do aluno e do orientador (join manual: o Firestore não tem JOIN). */
 async function enriquecer(lista: TCC[]): Promise<TccResumo[]> {
+  // Coleta todas as matrículas de alunos envolvidos (aluno_id principal + alunos_ids adicionais)
+  const todasMatriculas = new Set<string>();
+  lista.forEach((t) => {
+    if (t.aluno_id) todasMatriculas.add(t.aluno_id);
+    if (Array.isArray(t.alunos_ids)) {
+      t.alunos_ids.forEach((m) => todasMatriculas.add(m));
+    }
+  });
+
   const [alunos, orientadores] = await Promise.all([
-    porIds<Aluno>("alunos", lista.map((t) => t.aluno_id)),
+    porIds<Aluno>("alunos", Array.from(todasMatriculas)),
     porIds<ProfessorOrientador>("professores_orientadores", lista.map((t) => t.orientador_id)),
   ]);
   const usuarios = await porIds<Usuario>("usuarios", [
     ...[...alunos.values()].map((a) => a.usuario_id),
     ...[...orientadores.values()].map((o) => o.usuario_id),
   ]);
-  return lista.map((t) => ({
-    ...t,
-    alunoNome: usuarios.get(alunos.get(t.aluno_id)?.usuario_id ?? "")?.nome ?? t.aluno_id,
-    orientadorNome: usuarios.get(orientadores.get(t.orientador_id)?.usuario_id ?? "")?.nome ?? "—",
-  }));
+  return lista.map((t) => {
+    const matrículas = Array.from(
+      new Set([t.aluno_id, ...(Array.isArray(t.alunos_ids) ? t.alunos_ids : [])].filter(Boolean))
+    );
+    const nomes = matrículas.map(
+      (m) => usuarios.get(alunos.get(m)?.usuario_id ?? "")?.nome ?? m
+    );
+    return {
+      ...t,
+      alunoNome: nomes.length > 0 ? nomes.join(", ") : t.aluno_id,
+      orientadorNome: usuarios.get(orientadores.get(t.orientador_id)?.usuario_id ?? "")?.nome ?? "—",
+    };
+  });
 }
 
 // ---------- Painel de um TCC (marcos + entregas + versões + feedbacks) ----------
@@ -349,14 +372,82 @@ function porDefesa(a: TCC, b: TCC): number {
   return ta - tb || a.titulo.localeCompare(b.titulo, "pt-BR");
 }
 
-/** Painel do avaliador: só os TCCs em que ele consta na banca, com a etapa de cada um. */
+/** Painel da banca avaliadora:
+ * - Para AVALIADOR/ORIENTADOR: TCCs em que consta na banca examinadora.
+ * - Para COORDENACAO: todos os TCCs dos cursos que coordena.
+ * - Para ADMIN: todos os TCCs do sistema.
+ */
 export async function listarTccsDaBanca(sessao: AuthenticatedSession): Promise<TccBanca[]> {
-  if (sessao.perfil !== PerfilEnum.AVALIADOR) return [];
-  const prof = await buscarPorUsuario("professores_avaliadores", sessao.usuario.id);
-  if (!prof) return [];
+  // 1. Visão de Gestão (Coordenação / Admin)
+  if (sessao.perfil === PerfilEnum.COORDENACAO || sessao.perfil === PerfilEnum.ADMIN) {
+    const tccsCol = db().collection("tccs");
+    let listaTccs: TCC[];
 
+    if (sessao.perfil === PerfilEnum.COORDENACAO) {
+      const coord = await buscarPorUsuario("coordenadores", sessao.usuario.id);
+      const uDoc = await db().collection("usuarios").doc(sessao.usuario.id).get();
+      const uData = uDoc.data();
+      const cursosPermitidos: string[] =
+        coord?.data()?.cursos ?? uData?.cursosCoordenados ?? uData?.cursos ?? [];
+      const todos = docs<TCC>(await tccsCol.get());
+      if (cursosPermitidos && cursosPermitidos.length > 0) {
+        listaTccs = todos.filter((t) => t.curso && cursosPermitidos.includes(t.curso));
+      } else {
+        listaTccs = todos;
+      }
+    } else {
+      listaTccs = docs<TCC>(await tccsCol.get());
+    }
+
+    if (!listaTccs.length) return [];
+
+    const tccIds = listaTccs.map((t) => t.id);
+    const [resumos, finais, bancas] = await Promise.all([
+      enriquecer(listaTccs),
+      versoesFinais(tccIds),
+      emLotes<BancaAvaliacao>("bancas_avaliacao", "tcc_id", tccIds),
+    ]);
+
+    // Verifica se a coordenação/admin também tem avaliação própria em alguma banca
+    const prof = await buscarPorUsuario("professores_avaliadores", sessao.usuario.id);
+    const idsUsuario = [...new Set([prof?.id, sessao.usuario.id].filter(Boolean))];
+    const minhaBancaMap = new Map<string, BancaAvaliacao>();
+    for (const b of bancas) {
+      if (idsUsuario.includes(b.avaliador_id)) {
+        minhaBancaMap.set(b.tcc_id, b);
+      }
+    }
+
+    const avaliacoes = minhaBancaMap.size > 0
+      ? await porIds<Avaliacao>("avaliacoes", [...minhaBancaMap.values()].map((b) => b.id))
+      : new Map<string, Avaliacao>();
+
+    return resumos
+      .map((t): TccBanca => {
+        const minhaBanca = minhaBancaMap.get(t.id);
+        const avaliacao = minhaBanca ? (avaliacoes.get(minhaBanca.id) ?? null) : null;
+        const versaoFinal = finais.get(t.id) ?? null;
+        return {
+          ...t,
+          bancaId: minhaBanca?.id ?? `gestao-${t.id}`,
+          versaoFinal,
+          avaliacao,
+          etapa: etapaBanca(Boolean(versaoFinal), avaliacao),
+        };
+      })
+      .sort(porDefesa);
+  }
+
+  // 2. Visão de Professor Avaliador / Orientador
+  const prof = await buscarPorUsuario("professores_avaliadores", sessao.usuario.id);
+  const avaliadorDocId = prof?.id;
+  const idsParaBuscar = [...new Set([avaliadorDocId, sessao.usuario.id].filter(Boolean))];
+
+  if (!idsParaBuscar.length) return [];
+
+  // Busca vínculos de banca onde o avaliador_id é o id do professor_avaliador ou o usuario_id
   const bancas = docs<BancaAvaliacao>(
-    await db().collection("bancas_avaliacao").where("avaliador_id", "==", prof.id).get(),
+    await db().collection("bancas_avaliacao").where("avaliador_id", "in", idsParaBuscar).get(),
   );
   if (!bancas.length) return [];
 
@@ -412,12 +503,17 @@ export async function getSalaBanca(sessao: AuthenticatedSession, tccId: string):
   let minhaAvaliacao: Avaliacao | null = null;
   let resultados: ResultadoBanca[] = [];
 
-  if (sessao.perfil === PerfilEnum.AVALIADOR) {
-    const prof = await buscarPorUsuario("professores_avaliadores", sessao.usuario.id);
-    const minha = bancas.find((b) => b.avaliador_id === prof?.id);
-    minhaBancaId = minha?.id ?? null;
-    minhaAvaliacao = minha ? (avaliacoes.get(minha.id) ?? null) : null;
-  } else {
+  const prof = await buscarPorUsuario("professores_avaliadores", sessao.usuario.id);
+  const idsAvaliador = [...new Set([prof?.id, sessao.usuario.id].filter(Boolean))];
+  const minha = bancas.find((b) => idsAvaliador.includes(b.avaliador_id));
+
+  if (minha) {
+    minhaBancaId = minha.id;
+    minhaAvaliacao = avaliacoes.get(minha.id) ?? null;
+  }
+
+  // Se não é exclusivamente o avaliador da banca (ex: orientador, coordenador ou se já avaliou)
+  if (sessao.perfil !== PerfilEnum.AVALIADOR || minhaAvaliacao?.status === "FINALIZADA") {
     const finalizadas = bancas.filter((b) => avaliacoes.get(b.id)?.status === "FINALIZADA");
     const profs = await porIds<ProfessorAvaliador>("professores_avaliadores", finalizadas.map((b) => b.avaliador_id));
     const usuarios = await porIds<Usuario>("usuarios", [...profs.values()].map((p) => p.usuario_id));

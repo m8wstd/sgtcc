@@ -346,16 +346,57 @@ export function createSubmissaoPostHandler(
 
       // Notifica o orientador sobre a nova entrega / nova versão
       if (registro?.tcc?.orientador_id) {
-        const orientadorUid = registro.context?.orientador?.usuario_id;
-        if (orientadorUid) {
-          const nomeAluno = session.nome ?? "O aluno";
-          const nomeArquivo = nomeExibicaoDoArquivo(versao.arquivoUrl);
-          criarNotificacoesEmLote(
-            [orientadorUid],
-            `${nomeAluno} enviou uma nova versão de "${marco.titulo}" (${nomeArquivo}) no TCC "${registro.tcc.titulo}".`,
-            `/dashboard/tcc/${tccId}/etapa/${marco.id}`
-          ).catch(() => {});
-        }
+        (async () => {
+          try {
+            let orientadorUid = registro.context?.orientador?.usuario_id;
+            if (!orientadorUid && adminDb) {
+              const profDoc = await adminDb.collection("professores_orientadores").doc(registro.tcc.orientador_id).get();
+              if (profDoc.exists) {
+                orientadorUid = profDoc.data()?.usuario_id ?? profDoc.id;
+              } else {
+                const uDoc = await adminDb.collection("usuarios").doc(registro.tcc.orientador_id).get();
+                if (uDoc.exists) orientadorUid = uDoc.id;
+              }
+            }
+
+            if (orientadorUid) {
+              const nomeAluno = session.nome ?? "O aluno";
+              const nomeArquivo = nomeExibicaoDoArquivo(versao.arquivoUrl);
+              await criarNotificacoesEmLote(
+                [orientadorUid],
+                `${nomeAluno} enviou uma nova versão de "${marco.titulo}" (${nomeArquivo}) no TCC "${registro.tcc.titulo}".`,
+                `/dashboard/tcc/${tccId}/etapa/${marco.id}`
+              );
+            }
+
+            // Se for entrega final, notifica também os avaliadores vinculados à banca
+            if (adminDb && (marco.id === "entrega-final" || marco.tipo === "ENTREGA_FINAL")) {
+              const bancasSnap = await adminDb.collection("bancas_avaliacao").where("tcc_id", "==", tccId).get();
+              const avaliadoresUids: string[] = [];
+              for (const bDoc of bancasSnap.docs) {
+                const bData = bDoc.data();
+                if (bData.avaliador_id) {
+                  const avDoc = await adminDb.collection("professores_avaliadores").doc(bData.avaliador_id).get();
+                  if (avDoc.exists && avDoc.data()?.usuario_id) {
+                    avaliadoresUids.push(avDoc.data()!.usuario_id);
+                  } else {
+                    avaliadoresUids.push(bData.avaliador_id);
+                  }
+                }
+              }
+              if (avaliadoresUids.length > 0) {
+                const nomeAluno = session.nome ?? "O aluno";
+                await criarNotificacoesEmLote(
+                  avaliadoresUids,
+                  `A versão final de "${registro.tcc.titulo}" foi submetida por ${nomeAluno} e está pronta para avaliação da banca.`,
+                  `/dashboard/tcc/${tccId}/banca`
+                );
+              }
+            }
+          } catch (notifErr) {
+            console.error("Erro ao notificar orientador sobre envio de arquivo:", notifErr);
+          }
+        })();
       }
 
       return Response.json(

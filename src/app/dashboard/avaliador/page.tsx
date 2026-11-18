@@ -8,7 +8,12 @@ export const metadata = { title: "Painel da Banca Avaliadora — SGTCC" };
 export const dynamic = "force-dynamic";
 
 async function ConteudoAvaliador() {
-  const sessao = await requireSessao(PerfilEnum.AVALIADOR);
+  const sessao = await requireSessao(
+    PerfilEnum.AVALIADOR,
+    PerfilEnum.ORIENTADOR,
+    PerfilEnum.COORDENACAO,
+    PerfilEnum.ADMIN,
+  );
   const tccs = await listarTccsDaBanca(sessao);
 
   return (

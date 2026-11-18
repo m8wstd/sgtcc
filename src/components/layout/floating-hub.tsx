@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Compass, FolderKanban, MessageSquare, Calendar } from "lucide-react";
+import { Home, Compass, FolderKanban, MessageSquare, Calendar, Award, BookOpen, Layers, ShieldCheck, GraduationCap } from "lucide-react";
 import { homeDoPerfil } from "@/lib/auth/perfis";
 import { PerfilEnum } from "@/types";
 
@@ -19,9 +19,27 @@ export function FloatingHub({ perfil }: FloatingHubProps) {
   // Com visual preparado e expansível para futuras abas
   const abas = [
     {
-      rotulo: "Início",
+      rotulo:
+        perfil === PerfilEnum.ALUNO
+          ? "Aluno"
+          : perfil === PerfilEnum.ORIENTADOR || perfil === PerfilEnum.AVALIADOR
+          ? "Orientações"
+          : perfil === PerfilEnum.COORDENACAO
+          ? "Coordenação"
+          : perfil === PerfilEnum.ADMIN
+          ? "Administração"
+          : "Início",
       href: inicioHref,
-      icone: Home,
+      icone:
+        perfil === PerfilEnum.ALUNO
+          ? GraduationCap
+          : perfil === PerfilEnum.ORIENTADOR || perfil === PerfilEnum.AVALIADOR
+          ? BookOpen
+          : perfil === PerfilEnum.COORDENACAO
+          ? Layers
+          : perfil === PerfilEnum.ADMIN
+          ? ShieldCheck
+          : Home,
       ativo:
         (pathname === inicioHref ||
           pathname === "/dashboard" ||
@@ -39,16 +57,37 @@ export function FloatingHub({ perfil }: FloatingHubProps) {
           },
         ]
       : []),
-    ...(perfil === "ADMIN"
+    ...(perfil === PerfilEnum.ADMIN
       ? [
           {
             rotulo: "Coordenação",
-            href: "/dashboard/admin/coordenacao",
-            icone: FolderKanban,
-            ativo: pathname === "/dashboard/admin/coordenacao" || pathname.startsWith("/dashboard/tcc/"),
+            href: "/dashboard/coordenacao",
+            icone: Layers,
+            ativo: pathname.startsWith("/dashboard/coordenacao"),
           },
         ]
       : []),
+    ...(perfil === PerfilEnum.COORDENACAO || perfil === PerfilEnum.ADMIN
+      ? [
+          {
+            rotulo: "Orientações",
+            href: "/dashboard/professor",
+            icone: BookOpen,
+            ativo: pathname.startsWith("/dashboard/professor") || pathname.startsWith("/dashboard/orientador"),
+          },
+        ]
+      : []),
+    ...(perfil === PerfilEnum.ORIENTADOR || perfil === PerfilEnum.AVALIADOR || perfil === PerfilEnum.COORDENACAO || perfil === PerfilEnum.ADMIN
+      ? [
+          {
+            rotulo: "Banca",
+            href: "/dashboard/avaliador",
+            icone: Award,
+            ativo: pathname.startsWith("/dashboard/avaliador"),
+          },
+        ]
+      : []),
+
     {
       rotulo: "Mensagens",
       href: "/dashboard/mensagens",

@@ -18,12 +18,17 @@ export function canAccessTcc(
     case PerfilEnum.COORDENACAO:
       return true;
     case PerfilEnum.ALUNO:
-      return Boolean(context.aluno && tcc.aluno_id === context.aluno.matricula);
+      return Boolean(
+        context.aluno &&
+          (tcc.aluno_id === context.aluno.matricula ||
+            (Array.isArray(tcc.alunos_ids) && tcc.alunos_ids.includes(context.aluno.matricula)))
+      );
     case PerfilEnum.ORIENTADOR:
       return Boolean(
-        context.orientador &&
+        (context.orientador &&
           (tcc.orientador_id === context.orientador.id ||
-            tcc.orientador_id === context.orientador.usuario_id)
+            tcc.orientador_id === context.orientador.usuario_id)) ||
+        context.avaliadorVinculado === true
       );
     case PerfilEnum.AVALIADOR:
       return context.avaliadorVinculado === true;

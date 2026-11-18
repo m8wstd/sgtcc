@@ -4,8 +4,11 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
+  Award,
   BookOpen,
   GraduationCap,
+  Layers,
+  ShieldCheck,
   Search,
   Users,
   UserPlus,
@@ -370,14 +373,7 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
         </div>
 
         <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard/admin/coordenacao"
-            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-[#dfe2e8] bg-white text-xs font-bold text-[#111a2e] hover:bg-[#f4f5f7] hover:border-[#1e78f0] transition-all shadow-xs cursor-pointer"
-          >
-            <FolderKanban className="w-4 h-4 text-[#1e78f0]" />
-            <span>Aba de Coordenação Global</span>
-            <ArrowRight className="w-3.5 h-3.5 text-[#6b7385]" />
-          </Link>
+
 
           <button
             type="button"
@@ -496,6 +492,7 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
             label="Alunos"
             value={contadores.ALUNO}
             variant="yellow"
+            icon={<GraduationCap className="w-4 h-4" />}
             className="p-4"
             onClick={() => {
               setPerfilFiltro(perfilFiltro === "ALUNO" ? "TODOS" : "ALUNO");
@@ -519,6 +516,7 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
             label="Avaliadores"
             value={contadores.AVALIADOR}
             variant="neutral"
+            icon={<Award className="w-4 h-4" />}
             className="p-4"
             onClick={() => {
               setPerfilFiltro(perfilFiltro === "AVALIADOR" ? "TODOS" : "AVALIADOR");
@@ -530,6 +528,7 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
             label="Coordenação"
             value={contadores.COORDENACAO}
             variant="blue"
+            icon={<Layers className="w-4 h-4" />}
             className="p-4"
             onClick={() => {
               setPerfilFiltro(perfilFiltro === "COORDENACAO" ? "TODOS" : "COORDENACAO");
@@ -541,7 +540,7 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
             label="Administradores"
             value={contadores.ADMIN}
             variant="red"
-            icon={<Shield className="w-4 h-4" />}
+            icon={<ShieldCheck className="w-4 h-4" />}
             className="p-4"
             onClick={() => {
               setPerfilFiltro(perfilFiltro === "ADMIN" ? "TODOS" : "ADMIN");
@@ -818,8 +817,8 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
                   className="w-full px-3 py-2 border border-[#dfe2e8] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
                 >
                   <option value={PerfilEnum.ALUNO}>Aluno</option>
-                  <option value={PerfilEnum.ORIENTADOR}>Professor Orientador</option>
-                  <option value={PerfilEnum.AVALIADOR}>Professor Avaliador (Banca)</option>
+                  <option value={PerfilEnum.ORIENTADOR}>Professor</option>
+                  <option value={PerfilEnum.AVALIADOR}>Professor (somente avaliador)</option>
                   <option value={PerfilEnum.COORDENACAO}>Coordenação de TCC</option>
                   <option value={PerfilEnum.ADMIN}>Administrador do Sistema</option>
                 </select>
@@ -1018,8 +1017,8 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
                     className="w-full px-3 py-2 border border-[#dfe2e8] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
                   >
                     <option value={PerfilEnum.ALUNO}>Aluno</option>
-                    <option value={PerfilEnum.ORIENTADOR}>Professor Orientador</option>
-                    <option value={PerfilEnum.AVALIADOR}>Professor Avaliador (Banca)</option>
+                    <option value={PerfilEnum.ORIENTADOR}>Professor</option>
+                    <option value={PerfilEnum.AVALIADOR}>Professor (somente avaliador)</option>
                     <option value={PerfilEnum.COORDENACAO}>Coordenação de TCC</option>
                     <option value={PerfilEnum.ADMIN}>Administrador do Sistema</option>
                   </select>

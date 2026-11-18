@@ -116,12 +116,12 @@ async function main() {
   const claudio = await criarUsuario("Cláudio Carvalho", "claudio@teste.sgtcc.dev", "COORDENACAO");
   const joana = await criarUsuario("Joana Jordão", "joana@teste.sgtcc.dev", "ORIENTADOR");
   const orient2 = await criarUsuario("Orientador Antigo", "orientador2@teste.sgtcc.dev", "ORIENTADOR");
-  const silvia = await criarUsuario("Silvia Silva", "silvia@teste.sgtcc.dev", "AVALIADOR");
+  const silvia = await criarUsuario("Silvia Silva", "silvia@teste.sgtcc.dev", "ORIENTADOR");
   const jorge = await criarUsuario("Jorge", "jorge@teste.sgtcc.dev", "ALUNO", "2026001");
   const maria = await criarUsuario("Maria", "maria@teste.sgtcc.dev", "ALUNO", "2026002");
 
   // Elenco extra para o painel da banca
-  const roberto = await criarUsuario("Roberto Alves", "roberto@teste.sgtcc.dev", "AVALIADOR");
+  const roberto = await criarUsuario("Roberto Alves", "roberto@teste.sgtcc.dev", "ORIENTADOR");
   const orientMarcos = await criarUsuario("Marcos Tavares", "marcos@teste.sgtcc.dev", "ORIENTADOR");
   const extras = [
     { nome: "Carlos Mendes", email: "carlos@teste.sgtcc.dev", matricula: "2026003" },
@@ -153,6 +153,16 @@ async function main() {
     id: orientMarcos,
     usuario_id: orientMarcos,
     cursos: ["Engenharia de Software", "Ciência da Computação"],
+  });
+  await db.collection("professores_orientadores").doc(silvia).set({
+    id: silvia,
+    usuario_id: silvia,
+    cursos: ["Engenharia de Software", "Sistemas de Informação"],
+  });
+  await db.collection("professores_orientadores").doc(roberto).set({
+    id: roberto,
+    usuario_id: roberto,
+    cursos: ["Engenharia de Software"],
   });
   await db.collection("professores_avaliadores").doc(silvia).set({
     id: silvia,

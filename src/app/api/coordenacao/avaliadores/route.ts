@@ -16,49 +16,77 @@ export async function GET() {
   }
 
   try {
-    const [avaliadoresSnap, usuariosSnap] = await Promise.all([
+    const [avaliadoresSnap, orientadoresSnap, usuariosOrientadorSnap, usuariosAvaliadorSnap] = await Promise.all([
       adminDb.collection("professores_avaliadores").get(),
+      adminDb.collection("professores_orientadores").get(),
+      adminDb.collection("usuarios").where("perfil", "==", PerfilEnum.ORIENTADOR).get(),
       adminDb.collection("usuarios").where("perfil", "==", PerfilEnum.AVALIADOR).get(),
     ]);
 
-    const nomesMap = new Map<string, { nome: string; email: string }>();
-    usuariosSnap.docs.forEach((doc) => {
+    const nomesMap = new Map<string, { nome: string; email: string; cursos: string[] }>();
+    [...usuariosOrientadorSnap.docs, ...usuariosAvaliadorSnap.docs].forEach((doc) => {
       const data = doc.data();
       nomesMap.set(doc.id, {
-        nome: data.nome ?? "Docente Avaliador",
+        nome: data.nome ?? "Docente",
         email: data.email ?? "",
+        cursos: (data.cursosCoordenados as string[]) ?? [],
       });
     });
 
-    const avaliadores = avaliadoresSnap.docs.map((doc) => {
+    const avaliadoresMap = new Map<string, { id: string; usuario_id: string; nome: string; email: string; cursos: string[] }>();
+
+    // Processa professores_avaliadores
+    avaliadoresSnap.docs.forEach((doc) => {
       const data = doc.data();
       const usuarioId = data.usuario_id ?? doc.id;
       const usuario = nomesMap.get(usuarioId) ?? nomesMap.get(doc.id);
-      return {
+      const cursos = (data.cursos as string[]) ?? usuario?.cursos ?? [];
+      avaliadoresMap.set(usuarioId, {
         id: doc.id,
         usuario_id: usuarioId,
-        nome: usuario?.nome ?? data.nome ?? `Prof. Avaliador ${doc.id.slice(0, 6)}`,
+        nome: usuario?.nome ?? data.nome ?? `Prof. ${doc.id.slice(0, 6)}`,
         email: usuario?.email ?? "",
-        cursos: (data.cursos as string[]) ?? [],
-      };
+        cursos,
+      });
     });
 
-    // Se houver usuários com perfil AVALIADOR que ainda não têm doc em professores_avaliadores
-    usuariosSnap.docs.forEach((uDoc) => {
-      const jaExiste = avaliadores.some((a) => a.usuario_id === uDoc.id || a.id === uDoc.id);
-      if (!jaExiste) {
+    // Processa professores_orientadores (já que qualquer professor pode ser avaliador de banca)
+    orientadoresSnap.docs.forEach((doc) => {
+      const data = doc.data();
+      const usuarioId = data.usuario_id ?? doc.id;
+      const usuario = nomesMap.get(usuarioId) ?? nomesMap.get(doc.id);
+      const cursos = (data.cursos as string[]) ?? usuario?.cursos ?? [];
+      if (!avaliadoresMap.has(usuarioId)) {
+        avaliadoresMap.set(usuarioId, {
+          id: doc.id,
+          usuario_id: usuarioId,
+          nome: usuario?.nome ?? data.nome ?? `Prof. ${doc.id.slice(0, 6)}`,
+          email: usuario?.email ?? "",
+          cursos,
+        });
+      } else {
+        // Mescla cursos se já existir
+        const existente = avaliadoresMap.get(usuarioId)!;
+        const cursosMesclados = Array.from(new Set([...existente.cursos, ...cursos]));
+        existente.cursos = cursosMesclados;
+      }
+    });
+
+    // Adiciona usuários com perfil de professor que não estão nas collections
+    [...usuariosOrientadorSnap.docs, ...usuariosAvaliadorSnap.docs].forEach((uDoc) => {
+      if (!avaliadoresMap.has(uDoc.id)) {
         const uData = uDoc.data();
-        avaliadores.push({
+        avaliadoresMap.set(uDoc.id, {
           id: uDoc.id,
           usuario_id: uDoc.id,
-          nome: uData.nome ?? "Docente Avaliador",
+          nome: uData.nome ?? "Docente",
           email: uData.email ?? "",
           cursos: (uData.cursosCoordenados as string[]) ?? [],
         });
       }
     });
 
-    avaliadores.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    const avaliadores = Array.from(avaliadoresMap.values()).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
     return NextResponse.json({ avaliadores });
   } catch (error) {

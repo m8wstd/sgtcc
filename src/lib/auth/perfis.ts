@@ -3,16 +3,16 @@ import { PerfilEnum } from "@/types";
 /** Home de cada perfil (RF01: redirecionamento dinâmico conforme perfil). */
 export const HOME_POR_PERFIL: Record<PerfilEnum, string> = {
   [PerfilEnum.ALUNO]: "/dashboard/aluno",
-  [PerfilEnum.ORIENTADOR]: "/dashboard/orientador",
-  [PerfilEnum.AVALIADOR]: "/dashboard/avaliador",
+  [PerfilEnum.ORIENTADOR]: "/dashboard/professor",
+  [PerfilEnum.AVALIADOR]: "/dashboard/professor",
   [PerfilEnum.COORDENACAO]: "/dashboard/coordenacao",
   [PerfilEnum.ADMIN]: "/dashboard/admin",
 };
 
 export const ROTULO_PERFIL: Record<PerfilEnum, string> = {
   [PerfilEnum.ALUNO]: "Aluno",
-  [PerfilEnum.ORIENTADOR]: "Professor Orientador",
-  [PerfilEnum.AVALIADOR]: "Professor Avaliador",
+  [PerfilEnum.ORIENTADOR]: "Professor",
+  [PerfilEnum.AVALIADOR]: "Professor",
   [PerfilEnum.COORDENACAO]: "Coordenação",
   [PerfilEnum.ADMIN]: "Administrador",
 };
