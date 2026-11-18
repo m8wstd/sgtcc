@@ -1075,6 +1075,46 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
                 </div>
               )}
 
+              {(usuarioEmEdicao.perfil === PerfilEnum.ORIENTADOR ||
+                usuarioEmEdicao.perfil === PerfilEnum.AVALIADOR) && (
+                <div className="p-3 bg-purple-50/50 rounded-xl border border-purple-100 space-y-2">
+                  <span className="font-semibold text-purple-700 block">
+                    Cursos de Atuação do Professor
+                  </span>
+                  <p className="text-[11px] text-[#6b7385]">
+                    Selecione os cursos em que o docente pode orientar ou avaliar trabalhos:
+                  </p>
+                  <div className="grid grid-cols-2 gap-1.5 pt-1">
+                    {CURSOS_PADRAO.map((curso) => {
+                      const list = usuarioEmEdicao.cursos ?? [];
+                      const ativo = list.includes(curso);
+                      return (
+                        <label
+                          key={curso}
+                          className="flex items-center gap-2 p-1.5 rounded-md hover:bg-white cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={ativo}
+                            onChange={() => {
+                              const novaLista = ativo
+                                ? list.filter((c) => c !== curso)
+                                : [...list, curso];
+                              setUsuarioEmEdicao({
+                                ...usuarioEmEdicao,
+                                cursos: novaLista,
+                              });
+                            }}
+                            className="rounded text-purple-600"
+                          />
+                          <span className="text-[11px] font-medium text-[#111a2e]">{curso}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {usuarioEmEdicao.perfil === PerfilEnum.COORDENACAO && (
                 <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 space-y-2">
                   <span className="font-semibold text-[#1e78f0] block">
@@ -1085,7 +1125,7 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
                   </p>
                   <div className="grid grid-cols-2 gap-1.5 pt-1">
                     {CURSOS_PADRAO.map((curso) => {
-                      const list = usuarioEmEdicao.cursosCoordenados ?? [];
+                      const list = usuarioEmEdicao.cursosCoordenados ?? usuarioEmEdicao.cursos ?? [];
                       const ativo = list.includes(curso);
                       return (
                         <label
@@ -1102,6 +1142,7 @@ export function AdminDashboardClient({ nome, dados, erro }: Props) {
                               setUsuarioEmEdicao({
                                 ...usuarioEmEdicao,
                                 cursosCoordenados: novaLista,
+                                cursos: novaLista,
                               });
                             }}
                             className="rounded text-[#1e78f0]"

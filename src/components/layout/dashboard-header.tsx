@@ -18,15 +18,78 @@ interface DashboardHeaderProps {
   };
 }
 
+interface ItemNotificacao {
+  id: string;
+  mensagem: string;
+  lida: boolean;
+  link?: string | null;
+  criadoEm: string;
+}
+
 export function DashboardHeader({ usuario }: DashboardHeaderProps) {
   const router = useRouter();
   const [menuAberto, setMenuAberto] = useState(false);
   const [notifAberta, setNotifAberta] = useState(false);
   const [modalConfigAberto, setModalConfigAberto] = useState(false);
   const [saindo, setSaindo] = useState(false);
+  const [notificacoes, setNotificacoes] = useState<ItemNotificacao[]>([]);
+  const [carregandoNotifs, setCarregandoNotifs] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
+
+  // Busca notificações reais do Firestore
+  const carregarNotificacoes = async () => {
+    try {
+      setCarregandoNotifs(true);
+      const res = await fetch("/api/notificacoes", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.notificacoes)) {
+          setNotificacoes(data.notificacoes);
+        }
+      }
+    } catch {
+      // Falha silenciosa
+    } finally {
+      setCarregandoNotifs(false);
+    }
+  };
+
+  useEffect(() => {
+    carregarNotificacoes();
+    // Atualiza periodicamente a cada 30s
+    const timer = setInterval(carregarNotificacoes, 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const marcarComoLida = async (id: string) => {
+    try {
+      const csrfRes = await fetch("/api/auth/csrf");
+      const { csrfToken } = await csrfRes.json();
+      await fetch("/api/notificacoes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+        body: JSON.stringify({ id }),
+      });
+      setNotificacoes((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, lida: true } : n))
+      );
+    } catch {}
+  };
+
+  const marcarTodasLidas = async () => {
+    try {
+      const csrfRes = await fetch("/api/auth/csrf");
+      const { csrfToken } = await csrfRes.json();
+      await fetch("/api/notificacoes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
+        body: JSON.stringify({ marcarTodas: true }),
+      });
+      setNotificacoes((prev) => prev.map((n) => ({ ...n, lida: true })));
+    } catch {}
+  };
 
   // Fecha menus ao clicar fora
   useEffect(() => {
@@ -69,23 +132,7 @@ export function DashboardHeader({ usuario }: DashboardHeaderProps) {
   const nomeExibicao = usuario.nome ?? usuario.email ?? "Usuário";
   const rotuloPerfil = ROTULO_PERFIL[usuario.perfil] ?? usuario.perfil;
 
-  // Notificações simuladas relevantes para o contexto do SGTCC
-  const notificacoes = [
-    {
-      id: "1",
-      titulo: "Novo prazo institucional",
-      descricao: "Calendário do semestre atualizado pela coordenação.",
-      tempo: "Há 1 hora",
-      lida: false,
-    },
-    {
-      id: "2",
-      titulo: "Sistema em operação",
-      descricao: "Ambiente do SGTCC operando normalmente.",
-      tempo: "Hoje",
-      lida: true,
-    },
-  ];
+  const naoLidas = notificacoes.filter((n) => !n.lida).length;
 
   return (
     <>
@@ -137,7 +184,9 @@ export function DashboardHeader({ usuario }: DashboardHeaderProps) {
               >
                 <Bell className="w-4 h-4" />
                 {/* Badge de notificação não lida */}
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[#1e78f0] ring-2 ring-white" />
+                {naoLidas > 0 && (
+                  <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-[#1e78f0] ring-2 ring-white" />
+                )}
               </button>
 
               {/* Popover de Notificações */}
@@ -148,42 +197,90 @@ export function DashboardHeader({ usuario }: DashboardHeaderProps) {
                       <Bell className="w-4 h-4 text-[#1e78f0]" />
                       <span className="text-sm font-bold text-[#111a2e]">Notificações</span>
                     </div>
-                    <span className="text-[11px] font-medium text-[#1e78f0] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-                      1 nova
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {naoLidas > 0 ? (
+                        <>
+                          <span className="text-[11px] font-medium text-[#1e78f0] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                            {naoLidas} {naoLidas === 1 ? "nova" : "novas"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={marcarTodasLidas}
+                            className="text-[11px] font-semibold text-[#1e78f0] hover:underline cursor-pointer"
+                          >
+                            Ler todas
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-[11px] text-[#6b7385]">Tudo lido</span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="divide-y divide-[#f0f2f5] max-h-72 overflow-y-auto mt-2">
-                    {notificacoes.map((item) => (
-                      <div
-                        key={item.id}
-                        className={`py-3 px-2 rounded-lg transition-colors flex items-start gap-3 ${
-                          !item.lida ? "bg-blue-50/40" : "hover:bg-[#f8f9fa]"
-                        }`}
-                      >
+                    {carregandoNotifs && notificacoes.length === 0 ? (
+                      <div className="py-6 text-center text-xs text-[#6b7385]">Carregando...</div>
+                    ) : notificacoes.length === 0 ? (
+                      <div className="py-6 text-center text-xs text-[#6b7385]">Nenhuma notificação no momento.</div>
+                    ) : (
+                      notificacoes.map((item) => (
                         <div
-                          className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                            !item.lida ? "bg-[#1e78f0]" : "bg-[#cbd5e1]"
+                          key={item.id}
+                          className={`py-3 px-2 rounded-lg transition-colors flex items-start gap-3 ${
+                            !item.lida ? "bg-blue-50/40" : "hover:bg-[#f8f9fa]"
                           }`}
-                        />
-                        <div className="min-w-0 flex-1 space-y-0.5">
-                          <p className="text-xs font-semibold text-[#111a2e]">{item.titulo}</p>
-                          <p className="text-[11px] text-[#6b7385] leading-relaxed">
-                            {item.descricao}
-                          </p>
-                          <span className="text-[10px] text-[#9ca3af] block pt-0.5">
-                            {item.tempo}
-                          </span>
+                        >
+                          <div
+                            className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                              !item.lida ? "bg-[#1e78f0]" : "bg-[#cbd5e1]"
+                            }`}
+                          />
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <p className="text-xs text-[#111a2e] leading-snug">
+                              {item.mensagem}
+                            </p>
+                            <div className="flex items-center justify-between gap-2 pt-0.5">
+                              <span className="text-[10px] text-[#9ca3af]">
+                                {new Date(item.criadoEm).toLocaleDateString("pt-BR", {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                              {!item.lida && (
+                                <button
+                                  type="button"
+                                  onClick={() => marcarComoLida(item.id)}
+                                  className="text-[10px] font-semibold text-[#1e78f0] hover:underline cursor-pointer"
+                                >
+                                  Marcar como lida
+                                </button>
+                              )}
+                            </div>
+                            {item.link && (
+                              <Link
+                                href={item.link}
+                                onClick={() => {
+                                  marcarComoLida(item.id);
+                                  setNotifAberta(false);
+                                }}
+                                className="inline-block text-[11px] font-medium text-[#1e78f0] hover:underline pt-0.5"
+                              >
+                                Ver detalhes →
+                              </Link>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
 
                   <div className="pt-3 border-t border-[#dfe2e8] text-center">
                     <button
                       type="button"
                       onClick={() => setNotifAberta(false)}
-                      className="text-xs font-medium text-[#1e78f0] hover:underline"
+                      className="text-xs font-medium text-[#1e78f0] hover:underline cursor-pointer"
                     >
                       Fechar
                     </button>

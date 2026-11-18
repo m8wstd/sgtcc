@@ -8,6 +8,7 @@ import { criarRepositorioEntregas } from "./firestore-repository";
 import { criarServicoEntregas, LIMITE_COMENTARIO } from "./service";
 import { ACOES_ENTREGA, type AcaoEntrega } from "./status";
 import { confirmadorSubmissaoRF03 } from "./submission";
+import { criarNotificacoesEmLote } from "@/lib/notificacoes/service";
 
 export type StatusRouteContext = { params: Promise<{ entregaId: string }> };
 
@@ -110,7 +111,46 @@ export function createStatusPatchHandler(dependencies: Dependencies = defaultDep
       let body: unknown;
       try { body = await request.json(); }
       catch { throw new EntregaError(400, "INVALID_REQUEST", "Corpo da requisição inválido."); }
-      response = Response.json(await dependencies.alterarStatus(entregaId, sessao, parseComando(body)));
+      const resultado = await dependencies.alterarStatus(entregaId, sessao, parseComando(body));
+
+      // Notifica o aluno sobre a mudança de status / parecer
+      if (adminDb) {
+        (async () => {
+          try {
+            const entregaDoc = await adminDb.collection("entregas").doc(entregaId).get();
+            if (entregaDoc.exists) {
+              const tccId = entregaDoc.data()?.tcc_id;
+              const marcoId = entregaDoc.data()?.marco_id;
+              if (tccId) {
+                const tccDoc = await adminDb.collection("tccs").doc(tccId).get();
+                const alunoMatricula = tccDoc.data()?.aluno_id;
+                if (alunoMatricula) {
+                  const alunoDoc = await adminDb.collection("alunos").doc(alunoMatricula).get();
+                  const alunoUid = alunoDoc.data()?.usuario_id;
+                  if (alunoUid) {
+                    const statusMsg =
+                      resultado.entrega.status === "SOLICITADA_CORRECAO"
+                        ? `Seu orientador solicitou correções na etapa.`
+                        : resultado.entrega.status === "CONCLUIDA"
+                        ? `Sua entrega na etapa foi aprovada e marcada como concluída!`
+                        : resultado.entrega.status === "EM_REVISAO"
+                        ? `Seu orientador iniciou a revisão da sua entrega.`
+                        : `O status da sua entrega foi alterado para ${resultado.entrega.status}.`;
+
+                    await criarNotificacoesEmLote(
+                      [alunoUid],
+                      statusMsg,
+                      `/dashboard/aluno/etapa/${marcoId}?tcc=${tccId}`
+                    );
+                  }
+                }
+              }
+            }
+          } catch {}
+        })();
+      }
+
+      response = Response.json(resultado);
     } catch (error) {
       if (error instanceof EntregaError) {
         response = Response.json({ error: error.code, message: error.message }, { status: error.status });

@@ -104,25 +104,61 @@ export function SalaEtapaView({
   const [atualizandoStatus, setAtualizandoStatus] = useState(false);
   const [erroStatus, setErroStatus] = useState<string | null>(null);
 
-  // Salvar edições da Etapa
-  const handleSalvarEdicaoEtapa = (e: React.FormEvent) => {
+  // Salvar edições da Etapa com sincronização real no Firestore
+  const handleSalvarEdicaoEtapa = async (e: React.FormEvent) => {
     e.preventDefault();
-    setTituloEtapa(tempTitulo);
-    setDescricaoInstrucoes(tempInstrucoes);
-    setDataEntrega(tempDataEntrega);
-    setStatusKanban(tempStatus);
-    setEditandoEtapa(false);
-    setSalvoSucesso(true);
-    setTimeout(() => setSalvoSucesso(false), 4000);
-  };
-
-  // Orientador marca que está corrigindo -> move etapa para "Em correção"
-  const handleMarcarEmCorrecao = async () => {
     setErroStatus(null);
-    const id = etapaInicial.entregaId ?? `${tccId}__${marcoId}`;
     setAtualizandoStatus(true);
     try {
-      await alterarStatusEntrega(id, "INICIAR_REVISAO");
+      const res = await fetch(`/api/tcc/${encodeURIComponent(tccId)}/marcos/${encodeURIComponent(marcoId)}/sala`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "EDITAR_CONFIG",
+          config: {
+            titulo: tempTitulo,
+            instrucoes: tempInstrucoes,
+            dataEntrega: tempDataEntrega,
+          },
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Erro ao salvar alterações da etapa.");
+      }
+
+      setTituloEtapa(tempTitulo);
+      setDescricaoInstrucoes(tempInstrucoes);
+      setDataEntrega(tempDataEntrega);
+      setEditandoEtapa(false);
+      setSalvoSucesso(true);
+      router.refresh();
+      setTimeout(() => setSalvoSucesso(false), 4000);
+    } catch (err) {
+      setErroStatus(err instanceof Error ? err.message : "Erro ao salvar edição.");
+    } finally {
+      setAtualizandoStatus(false);
+    }
+  };
+
+  // Orientador marca que está corrigindo -> move etapa para "Em correção" (chamada real persistida)
+  const handleMarcarEmCorrecao = async () => {
+    setErroStatus(null);
+    setAtualizandoStatus(true);
+    try {
+      const res = await fetch(`/api/tcc/${encodeURIComponent(tccId)}/marcos/${encodeURIComponent(marcoId)}/sala`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "MARCAR_STATUS",
+          novoStatus: "EM_REVISAO",
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Não foi possível atualizar o status.");
+      }
+
       setStatusKanban("Em correção");
       setSalvoSucesso(true);
       router.refresh();
@@ -134,13 +170,24 @@ export function SalaEtapaView({
     }
   };
 
-  // Orientador marca etapa como concluída
+  // Orientador marca etapa como concluída (chamada real persistida)
   const handleMarcarConcluido = async () => {
     setErroStatus(null);
-    const id = etapaInicial.entregaId ?? `${tccId}__${marcoId}`;
     setAtualizandoStatus(true);
     try {
-      await alterarStatusEntrega(id, "CONCLUIR");
+      const res = await fetch(`/api/tcc/${encodeURIComponent(tccId)}/marcos/${encodeURIComponent(marcoId)}/sala`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "MARCAR_STATUS",
+          novoStatus: "CONCLUIDA",
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Não foi possível concluir a etapa.");
+      }
+
       setStatusKanban("Concluído");
       setSalvoSucesso(true);
       router.refresh();
@@ -152,27 +199,66 @@ export function SalaEtapaView({
     }
   };
 
-  // Adicionar Material de Apoio
-  const handleAdicionarMaterial = (e: React.FormEvent) => {
+  // Adicionar Material de Apoio com sincronização real no Firestore
+  const handleAdicionarMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoMaterialNome.trim()) return;
 
-    const novoMat: MaterialApoio = {
-      id: `mat-${Date.now()}`,
-      nome: novoMaterialNome.trim(),
-      tipo: novoMaterialTipo.toUpperCase(),
-      tamanho: novoMaterialTamanho,
-      url: "#",
-    };
-
-    setMateriais([novoMat, ...materiais]);
-    setNovoMaterialNome("");
-    setMostrarFormMaterial(false);
+    setErroStatus(null);
+    setAtualizandoStatus(true);
+    try {
+      const res = await fetch(`/api/tcc/${encodeURIComponent(tccId)}/marcos/${encodeURIComponent(marcoId)}/sala`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "NOVO_MATERIAL",
+          material: {
+            nome: novoMaterialNome.trim(),
+            tipo: novoMaterialTipo.toUpperCase(),
+            tamanho: novoMaterialTamanho,
+            url: "#",
+          },
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Erro ao adicionar material.");
+      }
+      const data = await res.json();
+      setMateriais([data.material, ...materiais]);
+      setNovoMaterialNome("");
+      setMostrarFormMaterial(false);
+      setSalvoSucesso(true);
+      router.refresh();
+      setTimeout(() => setSalvoSucesso(false), 4000);
+    } catch (err) {
+      setErroStatus(err instanceof Error ? err.message : "Erro ao anexar material.");
+    } finally {
+      setAtualizandoStatus(false);
+    }
   };
 
-  // Remover Material de Apoio
-  const handleRemoverMaterial = (id: string) => {
-    setMateriais(materiais.filter((m) => m.id !== id));
+  // Remover Material de Apoio com sincronização real no Firestore
+  const handleRemoverMaterial = async (id: string) => {
+    setErroStatus(null);
+    try {
+      const res = await fetch(`/api/tcc/${encodeURIComponent(tccId)}/marcos/${encodeURIComponent(marcoId)}/sala`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "REMOVER_MATERIAL",
+          materialIdParaRemover: id,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Erro ao remover material.");
+      }
+      setMateriais(materiais.filter((m) => m.id !== id));
+      router.refresh();
+    } catch (err) {
+      setErroStatus(err instanceof Error ? err.message : "Erro ao remover material.");
+    }
   };
 
   // Envio real: Blob -> confirmação no Firestore -> atualização da sala.
@@ -195,29 +281,42 @@ export function SalaEtapaView({
     }
   };
 
-  // Ação de criar nova postagem pelo Orientador
-  const handleCriarPostagem = (e: React.FormEvent) => {
+  // Ação de criar nova postagem pelo Orientador com sincronização real no Firestore
+  const handleCriarPostagem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!novoTitulo.trim() || !novoConteudo.trim()) return;
 
-    const novaPost: PostagemSala = {
-      id: `post-${Date.now()}`,
-      autorNome: nomeUsuario,
-      autorPapel: "Professor(a) Orientador(a)",
-      dataHora:
-        new Date().toLocaleDateString("pt-BR") +
-        " às " +
-        new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-      titulo: novoTitulo.trim(),
-      conteudo: novoConteudo.trim(),
-    };
-
-    setPostagens([novaPost, ...postagens]);
-    setNovoTitulo("");
-    setNovoConteudo("");
-    setMostrarFormPostagem(false);
-    setPostagemCriadaSucesso(true);
-    setTimeout(() => setPostagemCriadaSucesso(false), 4000);
+    setErroStatus(null);
+    setAtualizandoStatus(true);
+    try {
+      const res = await fetch(`/api/tcc/${encodeURIComponent(tccId)}/marcos/${encodeURIComponent(marcoId)}/sala`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "NOVA_POSTAGEM",
+          postagem: {
+            titulo: novoTitulo.trim(),
+            conteudo: novoConteudo.trim(),
+          },
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Erro ao publicar no mural da etapa.");
+      }
+      const data = await res.json();
+      setPostagens([data.postagem, ...postagens]);
+      setNovoTitulo("");
+      setNovoConteudo("");
+      setMostrarFormPostagem(false);
+      setPostagemCriadaSucesso(true);
+      router.refresh();
+      setTimeout(() => setPostagemCriadaSucesso(false), 4000);
+    } catch (err) {
+      setErroStatus(err instanceof Error ? err.message : "Erro ao postar mensagem.");
+    } finally {
+      setAtualizandoStatus(false);
+    }
   };
 
   // Parecer do orientador -> coloca em "Em correção" (com chamada real à API de status)

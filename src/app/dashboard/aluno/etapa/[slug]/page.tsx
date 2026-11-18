@@ -7,6 +7,7 @@ import { PerfilEnum } from "@/types";
 import { SalaEtapaView } from "@/components/etapa/sala-etapa-view";
 import { type SalaEtapaTcc, mapStatusParaColuna } from "@/app/dashboard/aluno/dados-etapas";
 import { formatarData } from "@/components/layout/status";
+import { adminDb } from "@/lib/firebase/admin";
 
 export const metadata = { title: "Sala da Etapa — SGTCC" };
 export const dynamic = "force-dynamic";
@@ -37,9 +38,19 @@ async function ConteudoEtapa({ params, searchParams }: Props) {
     return slugNormalizado === slug;
   });
   if (!item) notFound();
+
+  // Busca dados dinâmicos salvos da sala (postagens do orientador, materiais, etc.)
+  let dadosSala = null;
+  if (adminDb) {
+    const salaDoc = await adminDb.collection("etapas_sala").doc(`${tccId}__${item.marco.id}`).get();
+    if (salaDoc.exists) {
+      dadosSala = salaDoc.data();
+    }
+  }
+
   return (
     <SalaEtapaView
-      etapa={montarSalaReal(item)}
+      etapa={montarSalaReal(item, dadosSala)}
       tccId={tccId}
       marcoId={item.marco.id}
       podeEnviar={item.statusEfetivo !== "CONCLUIDA" && (!item.marco.bloqueioEstrito || new Date(String(item.marco.dataLimite)).getTime() >= Date.now())}

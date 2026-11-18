@@ -23,6 +23,7 @@ export interface AdminUsuarioItem {
   perfil: (typeof PERFIS_USUARIO)[number];
   matricula?: string;
   curso?: string;
+  cursos?: string[];
   cursosCoordenados?: string[];
   criadoEm?: string;
 }

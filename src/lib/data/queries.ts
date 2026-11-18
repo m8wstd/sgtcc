@@ -75,6 +75,7 @@ async function buscarPorUsuario(colecao: string, usuarioId: string) {
 export interface TccResumo extends TCC {
   alunoNome: string;
   orientadorNome: string;
+  avaliadoresUids?: string[];
 }
 
 /**
@@ -107,7 +108,10 @@ export async function listarTccsVisiveis(sessao: AuthenticatedSession): Promise<
     case PerfilEnum.ORIENTADOR: {
       const prof = await buscarPorUsuario("professores_orientadores", usuarioId);
       if (!prof) return [];
-      lista = docs<TCC>(await tccs.where("orientador_id", "==", prof.id).get());
+      // Busca tanto pelo id do documento em professores_orientadores quanto pelo usuario_id
+      const idsBusca = [...new Set([prof.id, usuarioId])];
+      const snap = await tccs.where("orientador_id", "in", idsBusca).get();
+      lista = docs<TCC>(snap);
       break;
     }
     case PerfilEnum.AVALIADOR: {

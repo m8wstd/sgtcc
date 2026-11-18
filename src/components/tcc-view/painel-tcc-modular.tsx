@@ -7,8 +7,6 @@ import {
   Calendar,
   MessageSquare,
   Clock,
-  Columns3,
-  List,
   FileText,
   UploadCloud,
   PlusCircle,
@@ -32,6 +30,7 @@ import {
 } from "@/components/layout/status";
 import type { ItemMarco, TccResumo } from "@/lib/data/queries";
 import type { StatusEntrega } from "@/types";
+import { formatarSemestre, derivarSemestreTcc } from "@/lib/semestre";
 
 // ── Colunas Kanban com cores alinhadas aos Stickers do Design System ────────
 export const COLUNAS_KANBAN = [
@@ -74,7 +73,6 @@ export function PainelTccModular({
   onTrocarTccHref,
 }: PainelTccModularProps) {
   const isOrientador = papel === "orientador";
-  const [viewMode, setViewMode] = useState<"kanban" | "lista">("kanban");
   const [exibirPendente, setExibirPendente] = useState(true);
   const [exibirConcluido, setExibirConcluido] = useState(false);
 
@@ -173,25 +171,25 @@ export function PainelTccModular({
             <span className="text-[11px] font-semibold text-[#6b7385] px-2">
               Fase:
             </span>
-            {outrosTccs.map((outro, i) => {
-              const ativo = outro.id === tcc.id;
-              const rotulo = outro.fase ? `TCC ${outro.fase}` : `TCC ${i + 1}`;
-              const href = onTrocarTccHref ? onTrocarTccHref(outro.id) : `/dashboard/tcc/${outro.id}`;
+              {outrosTccs.map((outro, i) => {
+                const ativo = outro.id === tcc.id;
+                const rotulo = outro.fase ? `TCC ${outro.fase}` : `TCC ${i + 1}`;
+                const href = onTrocarTccHref ? onTrocarTccHref(outro.id) : `/dashboard/tcc/${outro.id}`;
 
-              return (
-                <Link
-                  key={outro.id}
-                  href={href}
-                  className={`px-3 py-1 rounded text-xs font-bold transition-all ${
-                    ativo
-                      ? "bg-[#0f1b33] text-white shadow-xs"
-                      : "text-[#111a2e] hover:bg-white"
-                  }`}
-                >
-                  {rotulo}
-                </Link>
-              );
-            })}
+                return (
+                  <Link
+                    key={outro.id}
+                    href={href}
+                    className={`px-3 py-1 rounded text-xs font-bold transition-all ${
+                      ativo
+                        ? "bg-[#0f1b33] text-white shadow-xs"
+                        : "text-[#111a2e] hover:bg-white"
+                    }`}
+                  >
+                    {rotulo}
+                  </Link>
+                );
+              })}
           </div>
         )}
       </div>
@@ -317,6 +315,9 @@ export function PainelTccModular({
                 <span className="text-xs font-bold text-[#1e78f0] uppercase tracking-wider">
                   {tcc.fase ? `TCC ${tcc.fase}` : "Trabalho de Conclusão de Curso"}
                 </span>
+                <span className="text-[11px] font-semibold bg-gray-100 text-[#111a2e] px-2 py-0.5 rounded border border-[#dfe2e8]">
+                  Semestre {formatarSemestre(derivarSemestreTcc(tcc))}
+                </span>
                 {tcc.curso && (
                   <span className="text-[11px] font-semibold bg-blue-50 text-[#1e78f0] px-2 py-0.5 rounded border border-blue-100">
                     {tcc.curso}
@@ -411,48 +412,20 @@ export function PainelTccModular({
               <span>Criar Nova Etapa</span>
             </button>
           )}
-
-          <div className="flex items-center gap-1 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
-            <button
-              type="button"
-              onClick={() => setViewMode("kanban")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
-                viewMode === "kanban"
-                  ? "bg-white text-[#111a2e] shadow-xs"
-                  : "text-[#6b7385] hover:text-[#111a2e]"
-              }`}
-            >
-              <Columns3 className="w-3.5 h-3.5" />
-              Kanban
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("lista")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
-                viewMode === "lista"
-                  ? "bg-white text-[#111a2e] shadow-xs"
-                  : "text-[#6b7385] hover:text-[#111a2e]"
-              }`}
-            >
-              <List className="w-3.5 h-3.5" />
-              Lista
-            </button>
-          </div>
         </div>
       </div>
 
       {/* Visualização Kanban: O card inteiro é um Link clicável para a página da etapa */}
-      {viewMode === "kanban" ? (
-        <div className="w-full pb-4">
-          <div
-            className={`grid gap-3.5 w-full grid-cols-1 sm:grid-cols-2 ${
-              exibirPendente && exibirConcluido
-                ? "lg:grid-cols-5"
-                : (exibirPendente || exibirConcluido)
-                ? "lg:grid-cols-4"
-                : "lg:grid-cols-3"
-            }`}
-          >
+      <div className="w-full pb-4">
+        <div
+          className={`grid gap-3.5 w-full grid-cols-1 sm:grid-cols-2 ${
+            exibirPendente && exibirConcluido
+              ? "lg:grid-cols-5"
+              : (exibirPendente || exibirConcluido)
+              ? "lg:grid-cols-4"
+              : "lg:grid-cols-3"
+          }`}
+        >
             {COLUNAS_KANBAN.filter((col) => {
               if (col.key === "Pendente" && !exibirPendente) return false;
               if (col.key === "Concluído" && !exibirConcluido) return false;
@@ -545,75 +518,6 @@ export function PainelTccModular({
             })}
           </div>
         </div>
-      ) : (
-        /* Visualização em Lista - Cada item é um card clicável com indicação sutil */
-        <div className="space-y-3.5">
-          {itens
-            .filter(({ statusEfetivo }) => {
-              const colKey = mapStatusParaColuna(statusEfetivo);
-              if (colKey === "Pendente" && !exibirPendente) return false;
-              if (colKey === "Concluído" && !exibirConcluido) return false;
-              return true;
-            })
-            .map((item, idx) => {
-            const { marco, statusEfetivo } = item;
-            const statusLabel = ROTULO_STATUS_ENTREGA[statusEfetivo] ?? statusEfetivo;
-            const slug = slugDoMarco(marco.titulo, idx);
-            const etapaHref = isOrientador
-              ? `/dashboard/tcc/${tcc.id}/etapa/${slug}`
-              : `/dashboard/aluno/etapa/${slug}?tcc=${tcc.id}`;
-            const atrasado = statusEfetivo === "ATRASADA";
-
-            const ultimaPostagem = marco.postagens?.[marco.postagens.length - 1];
-            const ultimoFeedback = item.feedbacks?.[0];
-            const descricaoEtapa = marco.descricao;
-
-            return (
-              <Link
-                key={marco.id}
-                href={etapaHref}
-                className="group relative block border border-[#dfe2e8] hover:border-[#1e78f0] rounded-xl bg-white overflow-hidden shadow-xs hover:shadow-md transition-all duration-200 cursor-pointer p-4 sm:p-5"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="space-y-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-bold text-[#111a2e] group-hover:text-[#1e78f0] transition-colors truncate">
-                        {idx + 1}. {marco.titulo}
-                      </h4>
-                      {atrasado && (
-                        <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded px-1.5 py-0.5">
-                          Atrasado
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-[#6b7385] flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-[#6b7385]" /> Prazo limite:{" "}
-                      <span className="font-medium text-[#111a2e]">
-                        {formatarData(marco.dataLimite)}
-                      </span>
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-3 self-end sm:self-center">
-                    <StatusPill status={statusLabel} />
-                    <span className="text-xs font-semibold text-[#6b7385] group-hover:text-[#1e78f0] flex items-center gap-1 transition-colors">
-                      <span className="hidden sm:inline">Acessar sala</span>
-                      <span className="transition-transform group-hover:translate-x-1">&rarr;</span>
-                    </span>
-                  </div>
-                </div>
-
-                {/* Descrição objetiva da etapa cadastrada no cronograma */}
-                {descricaoEtapa && (
-                  <p className="mt-3 pt-3 border-t border-[#f0f2f5] text-xs text-[#6b7385] line-clamp-1">
-                    {descricaoEtapa}
-                  </p>
-                )}
-              </Link>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

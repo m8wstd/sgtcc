@@ -21,6 +21,7 @@ import {
   type ExtensaoPermitida,
 } from "@/lib/entregas/regras";
 import { PerfilEnum, type Entrega, type MarcoCronograma, type VersaoArquivo } from "@/types";
+import { criarNotificacoesEmLote } from "@/lib/notificacoes/service";
 
 export type SubmissaoRouteContext = { params: Promise<{ tccId: string }> };
 
@@ -342,6 +343,20 @@ export function createSubmissaoPostHandler(
           bytes,
         },
       });
+
+      // Notifica o orientador sobre a nova entrega / nova versão
+      if (registro?.tcc?.orientador_id) {
+        const orientadorUid = registro.context?.orientador?.usuario_id;
+        if (orientadorUid) {
+          const nomeAluno = session.nome ?? "O aluno";
+          const nomeArquivo = nomeExibicaoDoArquivo(versao.arquivoUrl);
+          criarNotificacoesEmLote(
+            [orientadorUid],
+            `${nomeAluno} enviou uma nova versão de "${marco.titulo}" (${nomeArquivo}) no TCC "${registro.tcc.titulo}".`,
+            `/dashboard/tcc/${tccId}/etapa/${marco.id}`
+          ).catch(() => {});
+        }
+      }
 
       return Response.json(
         {

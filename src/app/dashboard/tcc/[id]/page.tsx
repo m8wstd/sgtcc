@@ -50,14 +50,8 @@ async function Painel({ params, searchParams }: TccPageProps) {
     );
   }
 
-  // Se o usuário clicou num TCC 1 mas o aluno já está cursando o TCC 2,
-  // e não houve escolha explícita via navegação direta (?fase=...),
-  // redireciona automaticamente para o TCC 2 ativo.
-  const outros = painel.outrosTccsDoAluno ?? [];
-  const tcc2 = outros.find((t) => t.fase === 2);
-  if (painel.tcc.fase === 1 && tcc2 && tcc2.id !== id && sParams?.fase !== "1") {
-    redirect(`/dashboard/tcc/${tcc2.id}`);
-  }
+  // Se o TCC foi acessado pelo seu ID específico (seja TCC 1 ou TCC 2),
+  // exibe o TCC solicitado sem forçar redirecionamento para outra fase.
 
   const isOrientadorOuGestor =
     sessao.perfil === PerfilEnum.ORIENTADOR ||
