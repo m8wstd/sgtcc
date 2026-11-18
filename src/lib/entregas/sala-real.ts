@@ -3,26 +3,43 @@ import type { SalaEtapaTcc } from "@/app/dashboard/aluno/dados-etapas";
 import { nomeExibicaoDoArquivo } from "@/lib/entregas/regras";
 
 /** Adapta somente dados REAIS do Firestore ao layout atual da Sala da Etapa. */
-export function montarSalaReal(item: ItemMarco): SalaEtapaTcc {
+export function montarSalaReal(
+  item: ItemMarco,
+  dadosSalaFirestore?: {
+    postagens?: SalaEtapaTcc["postagensProfessor"];
+    materiais?: SalaEtapaTcc["materiaisFixados"];
+    instrucoesCustomizadas?: string | null;
+    dataEntregaCustomizada?: string | null;
+    statusCustomizado?: string | null;
+  } | null
+): SalaEtapaTcc {
+  const statusBase = dadosSalaFirestore?.statusCustomizado ?? item.statusEfetivo;
   const statusKanban: SalaEtapaTcc["statusKanban"] =
-    item.statusEfetivo === "CONCLUIDA" ? "Concluído" :
-    item.statusEfetivo === "PRONTA_PARA_REVISAO" ? "Para correção" :
-    item.statusEfetivo === "EM_REVISAO" || item.statusEfetivo === "SOLICITADA_CORRECAO" ? "Em correção" :
+    statusBase === "CONCLUIDA" ? "Concluído" :
+    statusBase === "PRONTA_PARA_REVISAO" ? "Para correção" :
+    statusBase === "EM_REVISAO" || statusBase === "SOLICITADA_CORRECAO" ? "Em correção" :
     item.versoes.length ? "Em andamento" : "Pendente";
+
   const data = new Date(String(item.marco.dataLimite));
+  const dataEntregaFormatada = dadosSalaFirestore?.dataEntregaCustomizada ||
+    (Number.isNaN(data.valueOf()) ? "A definir" : data.toLocaleDateString("pt-BR"));
+
+  const descricaoInstrucoes = dadosSalaFirestore?.instrucoesCustomizadas ||
+    item.marco.descricao ||
+    "Envie seus documentos desta etapa. As versões anteriores permanecem disponíveis para consulta.";
+
   return {
     slug: item.marco.id,
     titulo: item.marco.titulo,
-    progresso: item.statusEfetivo === "CONCLUIDA" ? 100 : item.versoes.length ? 50 : 0,
-    dataEntrega: Number.isNaN(data.valueOf()) ? "A definir" : data.toLocaleDateString("pt-BR"),
+    progresso: statusBase === "CONCLUIDA" ? 100 : item.versoes.length ? 50 : 0,
+    dataEntrega: dataEntregaFormatada,
     statusKanban,
-    statusEfetivo: item.statusEfetivo,
+    statusEfetivo: statusBase,
     entregaId: item.entrega?.id,
     comentarioOrientadora: item.feedbacks[0]?.comentario ?? "",
-    descricaoInstrucoes: "Envie seus documentos desta etapa. As versões anteriores permanecem disponíveis para consulta.",
-    // Materiais e postagens só devem aparecer quando forem efetivamente persistidos.
-    postagensProfessor: [],
-    materiaisFixados: [],
+    descricaoInstrucoes,
+    postagensProfessor: dadosSalaFirestore?.postagens ?? [],
+    materiaisFixados: dadosSalaFirestore?.materiais ?? [],
     historicoEnvios: item.versoes.map((v, idx) => ({
       id: v.id,
       versao: v.numeroVersao,

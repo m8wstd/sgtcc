@@ -27,7 +27,7 @@ export async function PUT(request: Request) {
     );
   }
 
-  const { id, nome, email, password, perfil, cursosCoordenados, matricula, curso } =
+  const { id, nome, email, password, perfil, cursosCoordenados, matricula, curso, cursos } =
     (body as {
       id?: string;
       nome?: string;
@@ -37,6 +37,7 @@ export async function PUT(request: Request) {
       cursosCoordenados?: string[];
       matricula?: string;
       curso?: string;
+      cursos?: string[];
     }) ?? {};
 
   if (!id || !nome || !email || !perfil) {
@@ -112,6 +113,7 @@ export async function PUT(request: Request) {
     };
     if (matriculaLimpa) dadosUsuario.matricula = matriculaLimpa;
     if (curso) dadosUsuario.curso = curso.trim();
+    if (cursos) dadosUsuario.cursos = cursos;
     if (cursosCoordenados) dadosUsuario.cursosCoordenados = cursosCoordenados;
 
     await adminDb.collection("usuarios").doc(id).set(dadosUsuario, { merge: true });
@@ -122,7 +124,7 @@ export async function PUT(request: Request) {
         {
           id,
           usuario_id: id,
-          cursos: cursosCoordenados ?? [],
+          cursos: cursosCoordenados ?? cursos ?? [],
         },
         { merge: true }
       );
@@ -131,6 +133,29 @@ export async function PUT(request: Request) {
         {
           matricula: matriculaLimpa,
           usuario_id: id,
+          curso: curso ? curso.trim() : undefined,
+        },
+        { merge: true }
+      );
+    } else if (perfil === PerfilEnum.ORIENTADOR) {
+      await adminDb.collection("professores_orientadores").doc(id).set(
+        {
+          id,
+          usuario_id: id,
+          nome: nome.trim(),
+          email: emailLimpo,
+          cursos: cursos ?? [],
+        },
+        { merge: true }
+      );
+    } else if (perfil === PerfilEnum.AVALIADOR) {
+      await adminDb.collection("professores_avaliadores").doc(id).set(
+        {
+          id,
+          usuario_id: id,
+          nome: nome.trim(),
+          email: emailLimpo,
+          cursos: cursos ?? [],
         },
         { merge: true }
       );

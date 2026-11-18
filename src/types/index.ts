@@ -68,6 +68,7 @@ export interface TCC {
   titulo: string;
   statusGeral: StatusGeralTCC;
   fase?: 1 | 2; // TCC 1 ou TCC 2
+  semestre?: string; // ex: "2026/2", "2026/1", "2025/2"
   curso?: string; // ex: "Engenharia de Software", "Sistemas de Informação"
   versaoFinalUrl?: string;
   /** Data/hora da defesa (usada pelo painel da banca para ordenar e alertar). */

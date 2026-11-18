@@ -4,6 +4,8 @@ import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusPill } from "@/components/ui/status-pill";
+import { SemestreSelector } from "@/components/ui/semestre-selector";
+import { semestreAtual, derivarSemestreTcc, compararSemestres } from "@/lib/semestre";
 import { formatarData } from "@/components/layout/status";
 import { ROTULO_DECISAO, ROTULO_ETAPA_BANCA, type EtapaBanca } from "@/lib/banca/status";
 import type { TccBanca } from "@/lib/data/queries";
@@ -13,8 +15,6 @@ import {
   Award,
   FileText,
   CheckCircle2,
-  Columns3,
-  List,
   PenLine,
   CalendarClock,
   Clock,
@@ -59,28 +59,41 @@ function ResumoAvaliacao({ t }: { t: TccBanca }) {
 }
 
 export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashboardClientProps) {
+  const semestresDisponiveis = useMemo(() => {
+    const setS = new Set<string>();
+    setS.add(semestreAtual());
+    tccs.forEach((t) => {
+      setS.add(derivarSemestreTcc(t));
+    });
+    return Array.from(setS).sort(compararSemestres);
+  }, [tccs]);
+
+  const [semestreAtivo, setSemestreAtivo] = useState<string>(semestreAtual());
   const [busca, setBusca] = useState("");
-  const [viewMode, setViewMode] = useState<"kanban" | "lista">("kanban");
   const [tabFase, setTabFase] = useState<"todas" | "1" | "2">("todas");
   const [filtroEtapa, setFiltroEtapa] = useState<EtapaBanca | "todas">("todas");
   const [exibirAvaliadasKanban, setExibirAvaliadasKanban] = useState(false);
   const [exibirAguardandoEnvio, setExibirAguardandoEnvio] = useState(false);
-  const [exibirAvaliadasLista, setExibirAvaliadasLista] = useState(false);
+
+  // TCCs pertencentes ao semestre ativo selecionado
+  const tccsDoSemestre = useMemo(() => {
+    return tccs.filter((t) => derivarSemestreTcc(t) === semestreAtivo);
+  }, [tccs, semestreAtivo]);
 
   const stats = useMemo(() => {
-    const conta = (e: EtapaBanca) => tccs.filter((t) => t.etapa === e).length;
+    const conta = (e: EtapaBanca) => tccsDoSemestre.filter((t) => t.etapa === e).length;
     return {
-      total: tccs.length,
+      total: tccsDoSemestre.length,
       aguardandoEnvio: conta("AGUARDANDO_ENVIO"),
       paraAvaliar: conta("PRONTA_PARA_AVALIAR"),
       emAvaliacao: conta("EM_AVALIACAO"),
       avaliadas: conta("AVALIADA"),
     };
-  }, [tccs]);
+  }, [tccsDoSemestre]);
 
   const tccsFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    return tccs.filter((t) => {
+    return tccsDoSemestre.filter((t) => {
       const matchFase = tabFase === "todas" ? true : tabFase === "1" ? t.fase === 1 || !t.fase : t.fase === 2;
       const matchEtapa = filtroEtapa === "todas" || t.etapa === filtroEtapa;
       const matchBusca =
@@ -91,50 +104,22 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
         t.orientadorNome.toLowerCase().includes(termo);
       return matchFase && matchEtapa && matchBusca;
     });
-  }, [tccs, tabFase, filtroEtapa, busca]);
-
-  // Lista ordenada por prioridade do avaliador:
-  // 1. Prontas para avaliar / Em avaliação
-  // 2. Aguardando envio (se exibidas)
-  // 3. Avaliadas no final
-  const tccsParaLista = useMemo(() => {
-    const filtrados = tccsFiltrados.filter((t) => {
-      if (t.etapa === "AGUARDANDO_ENVIO" && !exibirAguardandoEnvio && filtroEtapa !== "AGUARDANDO_ENVIO") {
-        return false;
-      }
-      if (t.etapa === "AVALIADA" && !exibirAvaliadasLista && filtroEtapa !== "AVALIADA") {
-        return false;
-      }
-      return true;
-    });
-
-    const pesoEtapa: Record<EtapaBanca, number> = {
-      PRONTA_PARA_AVALIAR: 1,
-      EM_AVALIACAO: 2,
-      AGUARDANDO_ENVIO: 3,
-      AVALIADA: 4,
-    };
-
-    return [...filtrados].sort((a, b) => {
-      const pesoA = pesoEtapa[a.etapa] ?? 99;
-      const pesoB = pesoEtapa[b.etapa] ?? 99;
-      if (pesoA !== pesoB) return pesoA - pesoB;
-
-      const timeA = a.defesaEm ? new Date(a.defesaEm).getTime() : Infinity;
-      const timeB = b.defesaEm ? new Date(b.defesaEm).getTime() : Infinity;
-      return timeA - timeB;
-    });
-  }, [tccsFiltrados, exibirAguardandoEnvio, exibirAvaliadasLista, filtroEtapa]);
-
-  const hrefSala = (t: TccBanca) => `/dashboard/tcc/${t.id}/banca`;
+  }, [tccsDoSemestre, tabFase, filtroEtapa, busca]);
 
   return (
     <div className="space-y-6 w-full">
-      <div className="border-b border-[#dfe2e8] pb-4">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">Olá, Prof. {nomeAvaliador}</h1>
-        <p className="text-sm text-[#6b7385] mt-1">
-          Trabalhos em que você participa da banca examinadora (TCC 1 e TCC 2), ordenados pela defesa mais próxima.
-        </p>
+      <div className="border-b border-[#dfe2e8] pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">Olá, Prof. {nomeAvaliador}</h1>
+          <p className="text-sm text-[#6b7385] mt-1">
+            Trabalhos em que você participa da banca examinadora (TCC 1 e TCC 2), ordenados pela defesa mais próxima.
+          </p>
+        </div>
+        <SemestreSelector
+          semestreAtivo={semestreAtivo}
+          semestresDisponiveis={semestresDisponiveis}
+          onChange={setSemestreAtivo}
+        />
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
@@ -147,7 +132,6 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
           onClick={() => {
             setFiltroEtapa("todas");
             setExibirAvaliadasKanban(true);
-            setExibirAvaliadasLista(true);
             setExibirAguardandoEnvio(true);
           }}
           active={filtroEtapa === "todas"}
@@ -196,15 +180,6 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
           variant="green"
           icon={<CheckCircle2 className="w-4 h-4" />}
           className="p-3 sm:p-4"
-          onClick={() => {
-            if (filtroEtapa === "AVALIADA") {
-              setFiltroEtapa("todas");
-            } else {
-              setFiltroEtapa("AVALIADA");
-              setExibirAvaliadasKanban(true);
-              setExibirAvaliadasLista(true);
-            }
-          }}
           active={filtroEtapa === "AVALIADA"}
         />
       </div>
@@ -239,7 +214,6 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
                 setFiltroEtapa("todas");
                 setExibirAguardandoEnvio(true);
                 setExibirAvaliadasKanban(true);
-                setExibirAvaliadasLista(true);
               }}
               className="text-[11px] font-semibold text-[#1e78f0] hover:underline cursor-pointer"
             >
@@ -248,8 +222,8 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
           )}
         </div>
 
-        <div className="flex items-center gap-2.5">
-          <div className="relative min-w-[200px] sm:w-64">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="relative w-full sm:w-64 min-w-[200px]">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#6b7385]" />
             <input
               type="text"
@@ -259,25 +233,6 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
               className="w-full pl-9 pr-3 py-1.5 text-xs bg-[#f4f5f7] border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0] focus:bg-white text-[#111a2e]"
             />
           </div>
-
-          <div className="flex items-center gap-1 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
-            {([
-              ["kanban", "Kanban", Columns3],
-              ["lista", "Lista", List],
-            ] as const).map(([modo, rotulo, Icone]) => (
-              <button
-                key={modo}
-                type="button"
-                onClick={() => setViewMode(modo)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
-                  viewMode === modo ? "bg-white text-[#111a2e] shadow-xs" : "text-[#6b7385] hover:text-[#111a2e]"
-                }`}
-              >
-                <Icone className="w-3.5 h-3.5" />
-                {rotulo}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -285,7 +240,7 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
         <div className="border border-[#dfe2e8] rounded-[10px] bg-white p-10 text-center text-sm text-[#6b7385]">
           Você ainda não foi vinculado(a) a nenhuma banca neste semestre. A coordenação faz esse vínculo.
         </div>
-      ) : viewMode === "kanban" ? (
+      ) : (
         <div className="space-y-4">
           {/* Barra de alternância para colunas secundárias/concluídas */}
           <div className="flex flex-wrap items-center justify-between gap-2 px-1">
@@ -366,7 +321,7 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
                         return (
                           <Link
                             key={t.id}
-                            href={hrefSala(t)}
+                            href={`/dashboard/tcc/${t.id}/banca`}
                             className="block border border-[#dfe2e8] rounded-[10px] p-3.5 bg-white space-y-2.5 shadow-2xs transition-all hover:border-[#1e78f0] hover:shadow-xs cursor-pointer group text-left"
                           >
                             <div className="flex items-start justify-between gap-1">
@@ -408,118 +363,6 @@ export function AvaliadorDashboardClient({ nomeAvaliador, tccs }: AvaliadorDashb
                 );
               })}
             </div>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {/* Controles para Lista */}
-          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-            <span className="text-xs text-[#6b7385]">
-              Ordenado por prioridade de avaliação. Trabalhos já avaliados ou aguardando envio ficam resguardados.
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setExibirAguardandoEnvio((prev) => !prev)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
-                  exibirAguardandoEnvio
-                    ? "bg-[#d5d9e0] text-[#111a2e] border-[#c0c5cd]"
-                    : "bg-white text-[#6b7385] border-[#dfe2e8] hover:text-[#111a2e]"
-                }`}
-              >
-                <Clock className="w-3.5 h-3.5" />
-                <span>Aguardando Envio ({stats.aguardandoEnvio})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setExibirAvaliadasLista((prev) => !prev)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
-                  exibirAvaliadasLista
-                    ? "bg-emerald-600 text-white border-emerald-600"
-                    : "bg-white text-[#6b7385] border-[#dfe2e8] hover:text-[#111a2e]"
-                }`}
-              >
-                {exibirAvaliadasLista ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                <span>Já Avaliadas ({stats.avaliadas})</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="border border-[#dfe2e8] rounded-[10px] overflow-hidden bg-white shadow-xs">
-            <div className="hidden md:grid grid-cols-[1.4fr_2fr_1.1fr_1fr_150px_40px] gap-4 px-6 py-3 bg-[#f4f5f7] border-b border-[#dfe2e8] text-xs font-semibold text-[#6b7385]">
-              <span>Aluno</span>
-              <span>Tema do Projeto Final</span>
-              <span>Orientador</span>
-              <span>Defesa</span>
-              <span>Situação</span>
-              <span className="text-right">Ação</span>
-            </div>
-
-            {tccsParaLista.length === 0 ? (
-              <div className="p-10 text-center text-sm text-[#6b7385]">Nenhum trabalho pendente com esses filtros.</div>
-            ) : (
-              <div className="divide-y divide-[#dfe2e8]">
-                {tccsParaLista.map((t) => {
-                  const prazo = prazoDefesa(t.defesaEm);
-                  const rotulo = ROTULO_ETAPA_BANCA[t.etapa];
-                  return (
-                    <Link key={t.id} href={hrefSala(t)} className="block p-4 sm:px-6 sm:py-4 hover:bg-[#f4f5f7] transition-colors group">
-                      <div className="hidden md:grid grid-cols-[1.4fr_2fr_1.1fr_1fr_150px_40px] gap-4 items-center">
-                        <div className="min-w-0">
-                          <b className="block text-sm font-semibold text-[#111a2e] truncate group-hover:text-[#1e78f0] transition-colors">
-                            {t.alunoNome}
-                          </b>
-                          <small className="text-xs text-[#6b7385]">Matrícula: {t.aluno_id}</small>
-                        </div>
-
-                        <div className="min-w-0">
-                          <p className="text-xs text-[#111a2e] font-medium truncate">{t.titulo}</p>
-                          <span className="text-[11px] text-[#1e78f0] font-semibold">
-                            {t.fase ? `TCC ${t.fase}` : "TCC 1"}
-                            {t.curso ? ` • ${t.curso}` : ""}
-                          </span>
-                        </div>
-
-                        <span className="text-xs text-[#111a2e] block truncate font-medium">{t.orientadorNome}</span>
-
-                        <div className="text-xs">
-                          <span className="block text-[#111a2e] font-medium">{formatarData(t.defesaEm)}</span>
-                          {prazo && (
-                            <small className={prazo.urgente && t.etapa !== "AVALIADA" ? "text-red-600 font-semibold" : "text-[#6b7385]"}>
-                              {prazo.texto}
-                            </small>
-                          )}
-                        </div>
-
-                        <div className="space-y-1">
-                          <StatusPill status={rotulo} />
-                          <div>
-                            <ResumoAvaliacao t={t} />
-                          </div>
-                        </div>
-
-                        <div className="flex justify-end">
-                          <ChevronRight className="w-4 h-4 text-[#6b7385] group-hover:text-[#1e78f0] group-hover:translate-x-0.5 transition-all" />
-                        </div>
-                      </div>
-
-                      <div className="flex md:hidden flex-col gap-2.5">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <b className="text-sm font-semibold text-[#111a2e] block group-hover:text-[#1e78f0]">{t.alunoNome}</b>
-                            <small className="text-xs text-[#6b7385]">Orientador: {t.orientadorNome}</small>
-                          </div>
-                          <StatusPill status={rotulo} />
-                        </div>
-                        <p className="text-xs text-[#111a2e] line-clamp-2">{t.titulo}</p>
-                        {prazo && <small className="text-[11px] text-[#6b7385]">{prazo.texto} · {formatarData(t.defesaEm)}</small>}
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
           </div>
         </div>
       )}

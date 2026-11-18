@@ -20,7 +20,11 @@ export function canAccessTcc(
     case PerfilEnum.ALUNO:
       return Boolean(context.aluno && tcc.aluno_id === context.aluno.matricula);
     case PerfilEnum.ORIENTADOR:
-      return Boolean(context.orientador && tcc.orientador_id === context.orientador.id);
+      return Boolean(
+        context.orientador &&
+          (tcc.orientador_id === context.orientador.id ||
+            tcc.orientador_id === context.orientador.usuario_id)
+      );
     case PerfilEnum.AVALIADOR:
       return context.avaliadorVinculado === true;
     default:

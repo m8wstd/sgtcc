@@ -4,6 +4,8 @@ import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusPill } from "@/components/ui/status-pill";
+import { SemestreSelector } from "@/components/ui/semestre-selector";
+import { semestreAtual, derivarSemestreTcc, normalizarSemestre, compararSemestres } from "@/lib/semestre";
 import { ROTULO_STATUS_TCC } from "@/components/layout/status";
 import type { TccResumo } from "@/lib/data/queries";
 import {
@@ -12,8 +14,6 @@ import {
   AlertCircle,
   Users,
   BookOpen,
-  Columns3,
-  List,
   CheckCircle2,
   Clock,
   Eye,
@@ -69,32 +69,47 @@ function mapAlunoParaColunaOrientador(t: TccResumo): ColunaOrientadorKey {
 }
 
 export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDashboardClientProps) {
+  // Lista de semestres disponíveis a partir dos TCCs do orientador (sempre incluindo o semestre atual)
+  const semestresDisponiveis = useMemo(() => {
+    const setS = new Set<string>();
+    setS.add(semestreAtual());
+    tccs.forEach((t) => {
+      setS.add(derivarSemestreTcc(t));
+    });
+    return Array.from(setS).sort(compararSemestres);
+  }, [tccs]);
+
+  const [semestreAtivo, setSemestreAtivo] = useState<string>(semestreAtual());
   const [faseAtiva, setFaseAtiva] = useState<TabFase>("todas");
   const [cursoAtivo, setCursoAtivo] = useState<string>("todos");
   const [statusAtivo, setStatusAtivo] = useState<"todos" | "Pendente" | "Em revisão" | "Concluído">("todos");
-  const [viewMode, setViewMode] = useState<"kanban" | "lista">("kanban");
   const [busca, setBusca] = useState("");
   const [exibirPendente, setExibirPendente] = useState(true);
   const [exibirConcluido, setExibirConcluido] = useState(false);
 
+  // TCCs pertencentes ao semestre ativo selecionado
+  const tccsDoSemestre = useMemo(() => {
+    return tccs.filter((t) => derivarSemestreTcc(t) === semestreAtivo);
+  }, [tccs, semestreAtivo]);
+
   const cursosDisponiveis = useMemo(() => {
     const setC = new Set<string>();
-    tccs.forEach((t) => {
+    tccsDoSemestre.forEach((t) => {
       if (t.curso) setC.add(t.curso);
     });
     return Array.from(setC);
-  }, [tccs]);
+  }, [tccsDoSemestre]);
 
   const stats = useMemo(() => {
-    const total = tccs.length;
-    const pendente = tccs.filter((t) => mapAlunoParaColunaOrientador(t) === "Pendente").length;
-    const emRevisao = tccs.filter((t) => mapAlunoParaColunaOrientador(t) === "Em revisão").length;
-    const concluidos = tccs.filter((t) => mapAlunoParaColunaOrientador(t) === "Concluído").length;
+    const total = tccsDoSemestre.length;
+    const pendente = tccsDoSemestre.filter((t) => mapAlunoParaColunaOrientador(t) === "Pendente").length;
+    const emRevisao = tccsDoSemestre.filter((t) => mapAlunoParaColunaOrientador(t) === "Em revisão").length;
+    const concluidos = tccsDoSemestre.filter((t) => mapAlunoParaColunaOrientador(t) === "Concluído").length;
     return { total, pendente, emRevisao, concluidos };
-  }, [tccs]);
+  }, [tccsDoSemestre]);
 
   const tccsFiltrados = useMemo(() => {
-    return tccs.filter((t) => {
+    return tccsDoSemestre.filter((t) => {
       const matchFase =
         faseAtiva === "todas"
           ? true
@@ -113,18 +128,25 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
 
       return matchFase && matchCurso && matchStatus && matchBusca;
     });
-  }, [tccs, faseAtiva, cursoAtivo, statusAtivo, busca]);
+  }, [tccsDoSemestre, faseAtiva, cursoAtivo, statusAtivo, busca]);
 
   return (
     <div className="space-y-6 w-full">
       {/* Cabeçalho */}
-      <div className="border-b border-[#dfe2e8] pb-4">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
-          Painel de Orientações
-        </h1>
-        <p className="text-sm text-[#6b7385] mt-1">
-          Acompanhamento dos seus orientandos por status de entrega no semestre atual
-        </p>
+      <div className="border-b border-[#dfe2e8] pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
+            Painel de Orientações
+          </h1>
+          <p className="text-sm text-[#6b7385] mt-1">
+            Acompanhamento dos seus orientandos por status de entrega no semestre selecionado
+          </p>
+        </div>
+        <SemestreSelector
+          semestreAtivo={semestreAtivo}
+          semestresDisponiveis={semestresDisponiveis}
+          onChange={setSemestreAtivo}
+        />
       </div>
 
       {/* Stats Cards com as 3 métricas principais e atalhos de filtro */}
@@ -167,8 +189,8 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
         />
       </div>
 
-      {/* Controles: Fase, Curso, Busca e Alternância Kanban / Lista */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      {/* Controles: Fase, Curso, Busca e Alternância Kanban */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">
           {/* Abas TCC 1 vs TCC 2 */}
           <div className="flex items-center gap-1 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
@@ -218,9 +240,9 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
           )}
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
           {/* Busca */}
-          <div className="relative min-w-[200px] sm:w-64">
+          <div className="relative flex-1 sm:w-64 min-w-[200px]">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#6b7385]" />
             <input
               type="text"
@@ -231,8 +253,8 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
             />
           </div>
 
-          {/* Alternador de Visão */}
-          <div className="flex items-center gap-1.5">
+          {/* Alternador de Visão de Colunas */}
+          <div className="flex items-center gap-1.5 flex-wrap">
             <button
               type="button"
               onClick={() => setExibirPendente((prev) => !prev)}
@@ -259,48 +281,20 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
               <span>Concluídos ({stats.concluidos})</span>
             </button>
           </div>
-
-          <div className="flex items-center gap-1 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
-            <button
-              type="button"
-              onClick={() => setViewMode("kanban")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
-                viewMode === "kanban"
-                  ? "bg-white text-[#111a2e] shadow-xs"
-                  : "text-[#6b7385] hover:text-[#111a2e]"
-              }`}
-            >
-              <Columns3 className="w-3.5 h-3.5" />
-              Kanban
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("lista")}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer ${
-                viewMode === "lista"
-                  ? "bg-white text-[#111a2e] shadow-xs"
-                  : "text-[#6b7385] hover:text-[#111a2e]"
-              }`}
-            >
-              <List className="w-3.5 h-3.5" />
-              Lista
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* KANBAN DO ORIENTADOR (3 COLUNAS: Pendente, Em revisão, Concluído) */}
-      {viewMode === "kanban" ? (
-        <div className="w-full overflow-x-auto pb-4">
-          <div
-            className={`grid gap-4 min-w-[760px] ${
-              exibirPendente && exibirConcluido
-                ? "grid-cols-3"
-                : exibirPendente || exibirConcluido
-                ? "grid-cols-2"
-                : "grid-cols-1"
-            }`}
-          >
+      {/* KANBAN DO ORIENTADOR: Totalmente responsivo no mobile (grid de 1 coluna em mobile, 2 em tablet e 3 em desktop) */}
+      <div className="w-full pb-4">
+        <div
+          className={`grid gap-4 w-full grid-cols-1 sm:grid-cols-2 ${
+            exibirPendente && exibirConcluido
+              ? "lg:grid-cols-3"
+              : exibirPendente || exibirConcluido
+              ? "lg:grid-cols-2"
+              : "lg:grid-cols-1"
+          }`}
+        >
             {COLUNAS_ORIENTADOR
               .filter((col) => {
                 if (col.key === "Pendente" && !exibirPendente) return false;
@@ -369,81 +363,6 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
             })}
           </div>
         </div>
-      ) : (
-        /* VISÃO LISTA TRADICIONAL */
-        <div className="border border-[#dfe2e8] rounded-[10px] overflow-hidden bg-white shadow-xs">
-          <div className="hidden md:grid grid-cols-[1.4fr_1.8fr_1fr_120px_40px] gap-4 px-6 py-3 bg-[#f4f5f7] border-b border-[#dfe2e8] text-xs font-semibold text-[#6b7385]">
-            <span>Aluno</span>
-            <span>Tema / Título</span>
-            <span>Fase & Curso</span>
-            <span>Status</span>
-            <span className="text-right">Ação</span>
-          </div>
-
-          {tccsFiltrados.length === 0 ? (
-            <div className="p-10 text-center text-sm text-[#6b7385]">
-              Nenhum orientando encontrado.
-            </div>
-          ) : (
-            <div className="divide-y divide-[#dfe2e8]">
-              {tccsFiltrados
-                .filter((t) => {
-                  const statusColuna = mapAlunoParaColunaOrientador(t);
-                  if (statusColuna === "Pendente" && !exibirPendente) return false;
-                  if (statusColuna === "Concluído" && !exibirConcluido) return false;
-                  return true;
-                })
-                .map((t) => {
-                  const statusColuna = mapAlunoParaColunaOrientador(t);
-
-                return (
-                  <Link
-                    key={t.id}
-                    href={`/dashboard/tcc/${t.id}`}
-                    className="block p-4 sm:px-6 sm:py-4 hover:bg-[#f4f5f7] transition-colors group"
-                  >
-                    <div className="hidden md:grid grid-cols-[1.4fr_1.8fr_1fr_120px_40px] gap-4 items-center">
-                      <div className="min-w-0">
-                        <b className="block text-sm font-semibold text-[#111a2e] truncate group-hover:text-[#1e78f0] transition-colors">
-                          {t.alunoNome}
-                        </b>
-                        <small className="text-xs text-[#6b7385]">Matrícula: {t.aluno_id}</small>
-                      </div>
-
-                      <div className="min-w-0">
-                        <p className="text-xs text-[#111a2e] font-medium truncate">{t.titulo}</p>
-                      </div>
-
-                      <div className="min-w-0">
-                        <span className="text-[11px] font-bold text-[#1e78f0] bg-blue-50 px-2 py-0.5 rounded">
-                          {t.fase ? `TCC ${t.fase}` : "TCC 1"}
-                        </span>
-                        {t.curso && <span className="text-xs text-[#6b7385] block mt-0.5 truncate">{t.curso}</span>}
-                      </div>
-
-                      <div>
-                        <StatusPill status={statusColuna} />
-                      </div>
-
-                      <div className="flex justify-end">
-                        <ChevronRight className="w-4 h-4 text-[#6b7385] group-hover:text-[#1e78f0] group-hover:translate-x-0.5 transition-all" />
-                      </div>
-                    </div>
-
-                    <div className="flex md:hidden flex-col gap-2">
-                      <div className="flex items-start justify-between">
-                        <b className="text-sm font-semibold text-[#111a2e]">{t.alunoNome}</b>
-                        <StatusPill status={statusColuna} />
-                      </div>
-                      <p className="text-xs text-[#111a2e] line-clamp-2">{t.titulo}</p>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

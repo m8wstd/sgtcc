@@ -5,6 +5,7 @@ import { getPainelTcc } from "@/lib/data/queries";
 import { montarSalaReal } from "@/lib/entregas/sala-real";
 import { SalaEtapaView } from "@/components/etapa/sala-etapa-view";
 import { PerfilEnum } from "@/types";
+import { adminDb } from "@/lib/firebase/admin";
 
 export const metadata = { title: "Etapa do TCC — SGTCC" };
 export const dynamic = "force-dynamic";
@@ -27,10 +28,20 @@ async function ConteudoEtapaTcc({ params }: Props) {
     return slugNormalizado === slug;
   });
   if (!item) notFound();
+
+  // Busca dados dinâmicos salvos da sala (postagens, materiais, customizações)
+  let dadosSala = null;
+  if (adminDb) {
+    const salaDoc = await adminDb.collection("etapas_sala").doc(`${id}__${item.marco.id}`).get();
+    if (salaDoc.exists) {
+      dadosSala = salaDoc.data();
+    }
+  }
+
   const isOrientador = sessao.perfil === PerfilEnum.ORIENTADOR || sessao.perfil === PerfilEnum.COORDENACAO || sessao.perfil === PerfilEnum.ADMIN;
   return (
     <SalaEtapaView
-      etapa={montarSalaReal(item)}
+      etapa={montarSalaReal(item, dadosSala)}
       tccId={id}
       marcoId={item.marco.id}
       podeEnviar={item.statusEfetivo !== "CONCLUIDA" && (!item.marco.bloqueioEstrito || new Date(String(item.marco.dataLimite)).getTime() >= Date.now())}

@@ -4,6 +4,8 @@ import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusPill } from "@/components/ui/status-pill";
+import { SemestreSelector } from "@/components/ui/semestre-selector";
+import { semestreAtual, derivarSemestreTcc, compararSemestres } from "@/lib/semestre";
 import { ROTULO_STATUS_TCC } from "@/components/layout/status";
 import type { TccResumo } from "@/lib/data/queries";
 import {
@@ -13,7 +15,7 @@ import {
   Users,
   Calendar,
   FileSpreadsheet,
-  Settings,
+  Award,
   X,
   Check,
   AlertTriangle,
@@ -29,7 +31,7 @@ interface CoordenacaoDashboardClientProps {
   tccs: TccResumo[];
 }
 
-type PainelAcaoTipo = "alocacao" | "cronograma" | "troca" | null;
+type PainelAcaoTipo = "alocacao" | "avaliadores" | "cronograma" | null;
 
 export function CoordenacaoDashboardClient({
   nomeUsuario: _nomeUsuario,
@@ -37,11 +39,27 @@ export function CoordenacaoDashboardClient({
   tccs: tccsIniciais,
 }: CoordenacaoDashboardClientProps) {
   const [tccs, setTccs] = useState<TccResumo[]>(tccsIniciais);
+
+  const semestresDisponiveis = useMemo(() => {
+    const setS = new Set<string>();
+    setS.add(semestreAtual());
+    tccs.forEach((t) => {
+      setS.add(derivarSemestreTcc(t));
+    });
+    return Array.from(setS).sort(compararSemestres);
+  }, [tccs]);
+
+  const [semestreAtivo, setSemestreAtivo] = useState<string>(semestreAtual());
   const [busca, setBusca] = useState("");
   const [statusFiltro, setStatusFiltro] = useState<string>("todos");
   const [cursoFiltro, setCursoFiltro] = useState<string>("todos");
   const [faseFiltro, setFaseFiltro] = useState<"todas" | "1" | "2">("todas");
   const [vistaAtiva, setVistaAtiva] = useState<"tccs" | "docentes">("tccs");
+
+  // TCCs pertencentes ao semestre ativo selecionado
+  const tccsDoSemestre = useMemo(() => {
+    return tccs.filter((t) => derivarSemestreTcc(t) === semestreAtivo);
+  }, [tccs, semestreAtivo]);
 
   // Mini Painel Acoplado de Ações da Coordenação
   const [painelAcaoAtivo, setPainelAcaoAtivo] = useState<PainelAcaoTipo>(null);
@@ -57,15 +75,22 @@ export function CoordenacaoDashboardClient({
   }>>([]);
   const [carregandoOrientadores, setCarregandoOrientadores] = useState(false);
 
-  // Estados dos formulários da coordenação
-  const [trocaAlunoId, setTrocaAlunoId] = useState("");
-  const [trocaOrientadorId, setTrocaOrientadorId] = useState("");
-  const [novoOrientadorNome, setNovoOrientadorNome] = useState("");
-  const [salvandoTroca, setSalvandoTroca] = useState(false);
+  // Lista de avaliadores cadastrados no sistema
+  const [avaliadoresSistema, setAvaliadoresSistema] = useState<Array<{
+    id: string;
+    usuario_id: string;
+    nome: string;
+    email: string;
+  }>>([]);
+  const [carregandoAvaliadores, setCarregandoAvaliadores] = useState(false);
 
-  // Estados da Alocação de Docentes
+  // Estados da Alocação de Docentes Orientadores
   const [alocacaoMapeamento, setAlocacaoMapeamento] = useState<Record<string, string>>({});
   const [salvandoAlocacao, setSalvandoAlocacao] = useState(false);
+
+  // Estados da Alocação de Professores Avaliadores (Bancas)
+  const [alocacaoAvaliadoresMapeamento, setAlocacaoAvaliadoresMapeamento] = useState<Record<string, string[]>>({});
+  const [salvandoAvaliadores, setSalvandoAvaliadores] = useState(false);
 
   const [cronograma, setCronograma] = useState<Array<{
     id: string;
@@ -98,9 +123,24 @@ export function CoordenacaoDashboardClient({
       .finally(() => setCarregandoOrientadores(false));
   }, []);
 
+  // Carregar avaliadores da API
+  const carregarAvaliadores = React.useCallback(() => {
+    setCarregandoAvaliadores(true);
+    fetch("/api/coordenacao/avaliadores")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.avaliadores && Array.isArray(data.avaliadores)) {
+          setAvaliadoresSistema(data.avaliadores);
+        }
+      })
+      .catch((err) => console.error("Falha ao carregar avaliadores:", err))
+      .finally(() => setCarregandoAvaliadores(false));
+  }, []);
+
   React.useEffect(() => {
     carregarOrientadores();
-  }, [carregarOrientadores]);
+    carregarAvaliadores();
+  }, [carregarOrientadores, carregarAvaliadores]);
 
   // Carregar cronograma real da API
   React.useEffect(() => {
@@ -261,27 +301,27 @@ export function CoordenacaoDashboardClient({
 
   const cursosDisponiveis = useMemo(() => {
     const setC = new Set<string>();
-    tccs.forEach((t) => {
+    tccsDoSemestre.forEach((t) => {
       if (t.curso) setC.add(t.curso);
     });
     return Array.from(setC);
-  }, [tccs]);
+  }, [tccsDoSemestre]);
 
   const stats = useMemo(() => {
-    const totalTccs = tccs.length;
-    const emAndamento = tccs.filter((t) => t.statusGeral === "EM_ANDAMENTO").length;
-    const aguardandoBanca = tccs.filter((t) => t.statusGeral === "AGUARDANDO_BANCA").length;
-    const aguardandoEnvio = tccs.filter(
+    const totalTccs = tccsDoSemestre.length;
+    const emAndamento = tccsDoSemestre.filter((t) => t.statusGeral === "EM_ANDAMENTO").length;
+    const aguardandoBanca = tccsDoSemestre.filter((t) => t.statusGeral === "AGUARDANDO_BANCA").length;
+    const aguardandoEnvio = tccsDoSemestre.filter(
       (t) => t.statusGeral === "EM_ANDAMENTO" && (!t.versaoFinalUrl || t.fase === 1)
     ).length;
     // TCCs com entrega atrasada simulados no universo de em andamento sem versão final
-    const entregasAtrasadas = tccs.filter(
+    const entregasAtrasadas = tccsDoSemestre.filter(
       (t) => t.statusGeral === "EM_ANDAMENTO" && t.id.includes("maria")
     ).length;
-    const concluidos = tccs.filter(
+    const concluidos = tccsDoSemestre.filter(
       (t) => t.statusGeral === "APROVADO" || t.statusGeral === "DEFENDIDO"
     ).length;
-    const orientadoresUnicos = new Set(tccs.map((t) => t.orientadorNome)).size;
+    const orientadoresUnicos = new Set(tccsDoSemestre.map((t) => t.orientadorNome)).size;
 
     return {
       totalTccs,
@@ -292,10 +332,10 @@ export function CoordenacaoDashboardClient({
       concluidos,
       orientadoresUnicos,
     };
-  }, [tccs]);
+  }, [tccsDoSemestre]);
 
   const tccsFiltrados = useMemo(() => {
-    return tccs.filter((t) => {
+    return tccsDoSemestre.filter((t) => {
       let matchStatus = true;
       if (statusFiltro === "todos") {
         matchStatus = true;
@@ -325,75 +365,39 @@ export function CoordenacaoDashboardClient({
 
       return matchStatus && matchCurso && matchFase && matchBusca;
     });
-  }, [tccs, statusFiltro, cursoFiltro, faseFiltro, busca]);
+  }, [tccsDoSemestre, statusFiltro, cursoFiltro, faseFiltro, busca]);
 
-  const handleSalvarTroca = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!trocaAlunoId) return;
-
-    // Obtém o nome e id do novo docente
-    let docId = trocaOrientadorId;
-    let nomeDocente = novoOrientadorNome.trim();
-
-    if (docId) {
-      const achado = orientadoresSistema.find((o) => o.id === docId || o.usuario_id === docId);
-      if (achado) {
-        nomeDocente = achado.nome;
-      }
-    } else if (nomeDocente) {
-      const achado = orientadoresSistema.find(
-        (o) => o.nome.toLowerCase() === nomeDocente.toLowerCase()
-      );
-      if (achado) {
-        docId = achado.id;
-        nomeDocente = achado.nome;
-      }
-    }
-
-    if (!docId && !nomeDocente) {
-      setAlertaErro("Selecione ou informe um professor orientador.");
-      return;
-    }
-
-    setSalvandoTroca(true);
+  const handleSalvarAvaliadoresTcc = async (tccId: string) => {
+    const selecionados = alocacaoAvaliadoresMapeamento[tccId] ?? [];
+    setSalvandoAvaliadores(true);
     setAlertaErro(null);
 
     try {
-      const res = await fetch("/api/coordenacao/orientadores", {
+      const res = await fetch("/api/coordenacao/avaliadores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tccId: trocaAlunoId,
-          novoOrientadorId: docId || undefined,
-          novoOrientadorNome: nomeDocente,
+          tccId,
+          avaliadoresUids: selecionados,
         }),
       });
 
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        throw new Error(data?.message || "Não foi possível transferir o orientador.");
+        throw new Error(data?.message || "Falha ao alocar professores avaliadores.");
       }
 
-      const nomeAtualizado = data?.novoOrientadorNome || nomeDocente;
-
       setTccs((prev) =>
-        prev.map((t) =>
-          t.id === trocaAlunoId ? { ...t, orientadorNome: nomeAtualizado, orientador_id: data?.novoOrientadorId || t.orientador_id } : t
-        )
+        prev.map((t) => (t.id === tccId ? { ...t, avaliadoresUids: selecionados } : t))
       );
-      setPainelAcaoAtivo(null);
-      setTrocaAlunoId("");
-      setTrocaOrientadorId("");
-      setNovoOrientadorNome("");
-      setAlertaSucesso("Orientador reatribuído com sucesso! Histórico acadêmico e entregas preservados.");
+      setAlertaSucesso("Professores avaliadores alocados para a banca com sucesso!");
       setTimeout(() => setAlertaSucesso(null), 5000);
-      carregarOrientadores();
     } catch (err) {
-      setAlertaErro(err instanceof Error ? err.message : "Erro ao efetivar transferência.");
+      setAlertaErro(err instanceof Error ? err.message : "Erro ao alocar avaliadores.");
       setTimeout(() => setAlertaErro(null), 5000);
     } finally {
-      setSalvandoTroca(false);
+      setSalvandoAvaliadores(false);
     }
   };
 
@@ -462,13 +466,20 @@ export function CoordenacaoDashboardClient({
   return (
     <div className="space-y-6 w-full">
       {/* Cabeçalho */}
-      <div className="border-b border-[#dfe2e8] pb-4">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
-          Painel da Coordenação de TCC
-        </h1>
-        <p className="text-sm text-[#6b7385] mt-1">
-          Gestão centralizada de orientações, alocações semestrais, prazos institucionais e resolução de conflitos acadêmicos
-        </p>
+      <div className="border-b border-[#dfe2e8] pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
+            Painel da Coordenação de TCC
+          </h1>
+          <p className="text-sm text-[#6b7385] mt-1">
+            Gestão centralizada de orientações, alocações semestrais, prazos institucionais e resolução de conflitos acadêmicos
+          </p>
+        </div>
+        <SemestreSelector
+          semestreAtivo={semestreAtivo}
+          semestresDisponiveis={semestresDisponiveis}
+          onChange={setSemestreAtivo}
+        />
       </div>
 
       {alertaSucesso && (
@@ -580,6 +591,24 @@ export function CoordenacaoDashboardClient({
 
             <button
               type="button"
+              onClick={() => alternarPainelAcao("avaliadores")}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                painelAcaoAtivo === "avaliadores"
+                  ? "bg-purple-600 text-white shadow-xs"
+                  : "bg-white border border-[#dfe2e8] text-[#111a2e] hover:bg-[#f0f2f5]"
+              }`}
+            >
+              <Award className="w-3.5 h-3.5" />
+              <span>Alocação de Avaliadores</span>
+              {painelAcaoAtivo === "avaliadores" ? (
+                <ChevronUp className="w-3 h-3" />
+              ) : (
+                <ChevronDown className="w-3 h-3 text-[#6b7385]" />
+              )}
+            </button>
+
+            <button
+              type="button"
               onClick={() => alternarPainelAcao("cronograma")}
               className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                 painelAcaoAtivo === "cronograma"
@@ -590,24 +619,6 @@ export function CoordenacaoDashboardClient({
               <Calendar className="w-3.5 h-3.5" />
               <span>Cronograma Semestral</span>
               {painelAcaoAtivo === "cronograma" ? (
-                <ChevronUp className="w-3 h-3" />
-              ) : (
-                <ChevronDown className="w-3 h-3 text-[#6b7385]" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => alternarPainelAcao("troca")}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                painelAcaoAtivo === "troca"
-                  ? "bg-emerald-600 text-white shadow-xs"
-                  : "bg-white border border-[#dfe2e8] text-[#111a2e] hover:bg-[#f0f2f5]"
-              }`}
-            >
-              <Settings className="w-3.5 h-3.5" />
-              <span>Troca de Orientador</span>
-              {painelAcaoAtivo === "troca" ? (
                 <ChevronUp className="w-3 h-3" />
               ) : (
                 <ChevronDown className="w-3 h-3 text-[#6b7385]" />
@@ -643,23 +654,6 @@ export function CoordenacaoDashboardClient({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-              <div className="p-3 bg-white rounded-xl border border-[#dfe2e8]">
-                <span className="text-[#6b7385] block">Capacidade Média de Lote</span>
-                <b className="text-sm text-[#111a2e]">Até 20 orientandos / docente</b>
-              </div>
-              <div className="p-3 bg-white rounded-xl border border-[#dfe2e8]">
-                <span className="text-[#6b7385] block">Cursos sob sua Coordenação</span>
-                <b className="text-sm text-[#111a2e]">
-                  {cursosDisponiveis.length > 0 ? cursosDisponiveis.join(", ") : "Todos os cursos"}
-                </b>
-              </div>
-              <div className="p-3 bg-white rounded-xl border border-[#dfe2e8]">
-                <span className="text-[#6b7385] block">Gestão de Vínculos</span>
-                <b className="text-sm text-emerald-700">Fluxo Institucional Regular</b>
-              </div>
-            </div>
-
             {/* Tabela de Alocação de Docentes */}
             <div className="bg-white rounded-xl border border-[#dfe2e8] overflow-hidden shadow-2xs">
               <div className="p-3 bg-[#f8f9fa] border-b border-[#dfe2e8] flex items-center justify-between">
@@ -678,10 +672,12 @@ export function CoordenacaoDashboardClient({
               </div>
 
               <div className="max-h-72 overflow-y-auto divide-y divide-[#dfe2e8]">
-                {tccs.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-[#6b7385]">Nenhum TCC para alocação.</div>
+                {tccs.filter((t) => t.statusGeral !== "APROVADO" && t.statusGeral !== "DEFENDIDO").length === 0 ? (
+                  <div className="p-4 text-center text-xs text-[#6b7385]">Nenhum TCC em andamento para alocação.</div>
                 ) : (
-                  tccs.map((t) => (
+                  tccs
+                    .filter((t) => t.statusGeral !== "APROVADO" && t.statusGeral !== "DEFENDIDO")
+                    .map((t) => (
                     <div key={t.id} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs hover:bg-[#fafbfc]">
                       <div className="min-w-0 flex-1">
                         <b className="text-[#111a2e] block truncate">{t.alunoNome}</b>
@@ -712,6 +708,109 @@ export function CoordenacaoDashboardClient({
                       </div>
                     </div>
                   ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {painelAcaoAtivo === "avaliadores" && (
+          <div className="p-5 bg-purple-50/20 border-b border-[#dfe2e8] space-y-4 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-purple-100 text-purple-700">
+                  <Award className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#111a2e]">
+                    Alocação de Professores Avaliadores para Bancas
+                  </h3>
+                  <p className="text-xs text-[#6b7385]">
+                    Convide e vincule os docentes examinadores responsáveis pela avaliação do TCC final.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPainelAcaoAtivo(null)}
+                className="p-1 rounded-md text-[#6b7385] hover:bg-[#e5e7eb] cursor-pointer"
+                title="Recolher painel"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-white rounded-xl border border-[#dfe2e8] overflow-hidden shadow-2xs">
+              <div className="p-3 bg-[#f8f9fa] border-b border-[#dfe2e8]">
+                <h4 className="text-xs font-bold text-[#111a2e]">Bancas e Avaliadores Designados</h4>
+                <p className="text-[11px] text-[#6b7385]">Selecione os professores avaliadores para compor a banca examinadora de cada TCC.</p>
+              </div>
+
+              <div className="max-h-80 overflow-y-auto divide-y divide-[#dfe2e8]">
+                {tccs.filter((t) => t.statusGeral !== "APROVADO" && t.statusGeral !== "DEFENDIDO").length === 0 ? (
+                  <div className="p-4 text-center text-xs text-[#6b7385]">Nenhum TCC ativo necessitando de banca.</div>
+                ) : (
+                  tccs
+                    .filter((t) => t.statusGeral !== "APROVADO" && t.statusGeral !== "DEFENDIDO")
+                    .map((t) => {
+                      const selecionados = alocacaoAvaliadoresMapeamento[t.id] ?? t.avaliadoresUids ?? [];
+                      return (
+                        <div key={t.id} className="p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs hover:bg-[#fafbfc]">
+                          <div className="min-w-0 flex-1">
+                            <b className="text-[#111a2e] block truncate text-sm">{t.alunoNome}</b>
+                            <p className="text-[11.5px] text-[#6b7385] font-medium">{t.titulo}</p>
+                            <span className="text-[10px] text-[#1e78f0] font-semibold">
+                              {t.curso ?? "Curso Padrão"} &bull; {t.fase ? `TCC ${t.fase}` : "TCC 1"} &bull; Orientador: {t.orientadorNome}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                            <div className="flex flex-wrap items-center gap-1.5 max-w-md">
+                              {avaliadoresSistema.length === 0 ? (
+                                <span className="text-[11px] text-[#6b7385]">Nenhum avaliador cadastrado.</span>
+                              ) : (
+                                avaliadoresSistema.map((av) => {
+                                  const marcado = selecionados.includes(av.usuario_id || av.id);
+                                  return (
+                                    <button
+                                      key={av.id}
+                                      type="button"
+                                      onClick={() => {
+                                        const uid = av.usuario_id || av.id;
+                                        const novo = marcado
+                                          ? selecionados.filter((x) => x !== uid)
+                                          : [...selecionados, uid];
+                                        setAlocacaoAvaliadoresMapeamento((prev) => ({
+                                          ...prev,
+                                          [t.id]: novo,
+                                        }));
+                                      }}
+                                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
+                                        marcado
+                                          ? "bg-purple-600 text-white border-purple-600 shadow-2xs"
+                                          : "bg-white text-[#6b7385] border-[#dfe2e8] hover:border-purple-300 hover:text-[#111a2e]"
+                                      }`}
+                                    >
+                                      {marcado ? "✓ " : "+ "}
+                                      {av.nome.split(" ")[0]} {av.nome.split(" ")[1] ?? ""}
+                                    </button>
+                                  );
+                                })
+                              )}
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleSalvarAvaliadoresTcc(t.id)}
+                              disabled={salvandoAvaliadores}
+                              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs whitespace-nowrap self-start sm:self-center"
+                            >
+                              Salvar Banca
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
                 )}
               </div>
             </div>
@@ -964,114 +1063,6 @@ export function CoordenacaoDashboardClient({
               </div>
             )}
           </div>
-        )}
-
-        {painelAcaoAtivo === "troca" && (
-          <form
-            onSubmit={handleSalvarTroca}
-            className="p-5 bg-emerald-50/20 border-b border-[#dfe2e8] space-y-4 animate-in fade-in duration-150"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-md bg-emerald-100 text-emerald-700">
-                  <Settings className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-[#111a2e]">
-                    Troca de Orientador com Preservação de Histórico
-                  </h3>
-                  <p className="text-xs text-[#6b7385]">
-                    Transferir orientando para novo docente preservando todas as entregas e correções anteriores.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPainelAcaoAtivo(null)}
-                className="p-1 rounded-md text-[#6b7385] hover:bg-[#e5e7eb] cursor-pointer"
-                title="Recolher formulário"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-[#111a2e] mb-1">
-                  Selecione o Trabalho / Aluno
-                </label>
-                <select
-                  value={trocaAlunoId}
-                  onChange={(e) => setTrocaAlunoId(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
-                >
-                  <option value="">Selecione um aluno...</option>
-                  {tccs.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.alunoNome} — {t.titulo} (Orientador Atual: {t.orientadorNome})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#111a2e] mb-1">
-                  Novo Professor Orientador
-                </label>
-                {orientadoresSistema.length > 0 ? (
-                  <select
-                    value={trocaOrientadorId}
-                    onChange={(e) => {
-                      setTrocaOrientadorId(e.target.value);
-                      const achado = orientadoresSistema.find((o) => o.id === e.target.value || o.usuario_id === e.target.value);
-                      if (achado) setNovoOrientadorNome(achado.nome);
-                    }}
-                    required
-                    className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
-                  >
-                    <option value="">Selecione um docente...</option>
-                    {orientadoresSistema.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.nome} {o.email ? `(${o.email})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={novoOrientadorNome}
-                    onChange={(e) => setNovoOrientadorNome(e.target.value)}
-                    placeholder="Ex: Prof. Dr. Carlos Eduardo"
-                    required
-                    className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
-                  />
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-              <p className="text-[11px] text-[#6b7385]">
-                <b>Garantia Institucional (RF05):</b> O novo orientador terá acesso imediato à sala e a todo o histórico de entregas e versões.
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPainelAcaoAtivo(null)}
-                  className="px-3.5 py-1.5 rounded-lg border border-[#dfe2e8] bg-white text-xs font-semibold text-[#6b7385] hover:bg-[#f4f5f7] cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={salvandoTroca}
-                  className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
-                >
-                  {salvandoTroca ? "Reatribuindo..." : "Efetivar Reatribuição"}
-                </button>
-              </div>
-            </div>
-          </form>
         )}
       </section>
 
