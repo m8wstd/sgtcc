@@ -38,18 +38,33 @@ async function getContextoFirestore(
   session: AuthenticatedSession,
 ): Promise<ContextoAvaliacao | null> {
   const db = requireDb();
+  let profId = session.usuario.id;
+
   const profSnap = await db
     .collection("professores_avaliadores")
     .where("usuario_id", "==", session.usuario.id)
     .limit(1)
     .get();
-  const prof = profSnap.docs[0];
-  if (!prof) return null;
 
+  if (!profSnap.empty) {
+    profId = profSnap.docs[0].id;
+  } else {
+    const docDireto = await db.collection("professores_avaliadores").doc(session.usuario.id).get();
+    if (!docDireto.exists) {
+      await db.collection("professores_avaliadores").doc(session.usuario.id).set({
+        id: session.usuario.id,
+        usuario_id: session.usuario.id,
+        cursos: [],
+      });
+    }
+  }
+
+  // Busca o registro da banca tanto pelo profId quanto pelo session.usuario.id
+  const idsBancaBusca = [...new Set([profId, session.usuario.id])];
   const bancaSnap = await db
     .collection("bancas_avaliacao")
     .where("tcc_id", "==", tccId)
-    .where("avaliador_id", "==", prof.id)
+    .where("avaliador_id", "in", idsBancaBusca)
     .limit(1)
     .get();
   const banca = bancaSnap.docs[0];
@@ -83,7 +98,7 @@ async function getContextoFirestore(
 
   return {
     bancaId: banca.id,
-    avaliadorId: prof.id,
+    avaliadorId: profId,
     tccTitulo: tcc.titulo ?? "TCC",
     temVersaoFinal,
     avaliacaoAtual: avaliacaoSnap.exists
@@ -162,8 +177,14 @@ export function createAvaliacaoPostHandler(
       if (!tccId) throw invalido("O identificador do TCC é obrigatório.");
 
       const session = await dependencies.getSession(request);
-      if (session.perfil !== PerfilEnum.AVALIADOR) {
-        throw new ForbiddenError("Apenas professores avaliadores registram avaliação da banca.");
+      const isDocenteAvaliador =
+        session.perfil === PerfilEnum.AVALIADOR ||
+        session.perfil === PerfilEnum.ORIENTADOR ||
+        session.perfil === PerfilEnum.COORDENACAO ||
+        session.perfil === PerfilEnum.ADMIN;
+
+      if (!isDocenteAvaliador) {
+        throw new ForbiddenError("Apenas docentes avaliadores registram avaliação da banca.");
       }
 
       let corpo: unknown;

@@ -8,12 +8,17 @@ export const metadata = { title: "Painel do Orientador — SGTCC" };
 export const dynamic = "force-dynamic";
 
 async function ConteudoOrientador() {
-  const sessao = await requireSessao(PerfilEnum.ORIENTADOR);
+  const sessao = await requireSessao(
+    PerfilEnum.ORIENTADOR,
+    PerfilEnum.AVALIADOR,
+    PerfilEnum.COORDENACAO,
+    PerfilEnum.ADMIN,
+  );
   const tccs = await listarTccsVisiveis(sessao);
 
   return (
     <OrientadorDashboardClient
-      nomeOrientador={sessao.nome ?? "Orientador(a)"}
+      nomeOrientador={sessao.nome ?? "Professor(a)"}
       tccs={tccs}
     />
   );

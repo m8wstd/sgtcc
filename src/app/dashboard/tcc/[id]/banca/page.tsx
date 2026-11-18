@@ -34,10 +34,14 @@ async function ConteudoBancaTcc({ params }: BancaTccPageProps) {
   const sala = await getSalaBanca(sessao, id);
   if (!sala) notFound();
 
+  // Se o usuário faz parte da banca avaliadora (mesmo sendo orientador ou coordenação),
+  // seu papel na sala da banca é "avaliador" para poder emitir seu parecer e nota.
+  const papelEfetivo = sala.minhaBancaId ? "avaliador" : papelDe(sessao.perfil);
+
   return (
     <SalaBancaView
       sala={sala}
-      papelUsuario={papelDe(sessao.perfil)}
+      papelUsuario={papelEfetivo}
       voltarHref={sessao.perfil === PerfilEnum.AVALIADOR ? "/dashboard/avaliador" : `/dashboard/tcc/${id}`}
     />
   );

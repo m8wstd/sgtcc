@@ -5,6 +5,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { assertTccAccess } from "@/lib/auth/authorization";
 import { getTccAccessRecord } from "@/lib/auth/firestore-repository";
 import { PerfilEnum } from "@/types";
+import { criarNotificacoesEmLote } from "@/lib/notificacoes/service";
 
 export const runtime = "nodejs";
 
@@ -227,6 +228,58 @@ export async function POST(
         salaUpdates.parecerMaisRecente = parecerTexto;
       }
       await salaRef.set(salaUpdates, { merge: true });
+
+      // 4. Notifica o aluno sobre a mudança de status e parecer
+      (async () => {
+        try {
+          const tccDoc = await adminDb.collection("tccs").doc(tccId).get();
+          const tccData = tccDoc.data();
+          const alunoId = tccData?.aluno_id;
+
+          let alunoUid: string | null = null;
+          if (alunoId) {
+            // Busca aluno na collection alunos (onde doc.id é a matrícula)
+            const alunoDoc = await adminDb.collection("alunos").doc(alunoId).get();
+            if (alunoDoc.exists) {
+              alunoUid = alunoDoc.data()?.usuario_id ?? null;
+            } else {
+              // Ou busca por usuario_id / uid
+              const alunoSnap = await adminDb.collection("alunos").where("usuario_id", "==", alunoId).limit(1).get();
+              if (!alunoSnap.empty) {
+                alunoUid = alunoSnap.docs[0].data().usuario_id;
+              } else {
+                const uDoc = await adminDb.collection("usuarios").doc(alunoId).get();
+                if (uDoc.exists) alunoUid = uDoc.id;
+              }
+            }
+          }
+
+          if (alunoUid) {
+            // Busca nome da etapa se disponível
+            const marcoDoc = await adminDb.collection("marcos_cronograma").doc(marcoId).get();
+            const marcoNome = marcoDoc.data()?.titulo ?? "etapa";
+
+            const statusFormatado =
+              novoStatus === "CONCLUIDA"
+                ? "concluída"
+                : novoStatus === "SOLICITADA_CORRECAO"
+                ? "com correções solicitadas"
+                : "em revisão";
+
+            const textoMsg = parecerTexto
+              ? `A etapa "${marcoNome}" foi marcada como ${statusFormatado}. Parecer: "${parecerTexto.slice(0, 100)}${parecerTexto.length > 100 ? "..." : ""}"`
+              : `A etapa "${marcoNome}" foi marcada como ${statusFormatado} pelo orientador.`;
+
+            await criarNotificacoesEmLote(
+              [alunoUid],
+              textoMsg,
+              `/dashboard/aluno/etapa/${encodeURIComponent(marcoId)}?tcc=${encodeURIComponent(tccId)}`
+            );
+          }
+        } catch (notifErr) {
+          console.error("Erro ao notificar aluno sobre mudança de status:", notifErr);
+        }
+      })();
 
       return NextResponse.json({ success: true, novoStatus });
     }

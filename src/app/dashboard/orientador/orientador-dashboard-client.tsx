@@ -23,6 +23,8 @@ import {
 interface OrientadorDashboardClientProps {
   nomeOrientador: string;
   tccs: TccResumo[];
+  /** Quando usado como aba dentro do ProfessorDashboard, oculta o h1 próprio */
+  ocultarCabecalho?: boolean;
 }
 
 type TabFase = "todas" | "1" | "2";
@@ -68,7 +70,7 @@ function mapAlunoParaColunaOrientador(t: TccResumo): ColunaOrientadorKey {
   return "Pendente";
 }
 
-export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDashboardClientProps) {
+export function OrientadorDashboardClient({ nomeOrientador, tccs, ocultarCabecalho }: OrientadorDashboardClientProps) {
   // Lista de semestres disponíveis a partir dos TCCs do orientador (sempre incluindo o semestre atual)
   const semestresDisponiveis = useMemo(() => {
     const setS = new Set<string>();
@@ -132,9 +134,9 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
 
   return (
     <div className="space-y-6 w-full">
-      {/* Cabeçalho */}
-      <div className="border-b border-[#dfe2e8] pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
+      {/* Cabeçalho — oculto quando usado como aba no painel unificado */}
+      {!ocultarCabecalho && (
+        <div className="mb-4">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
             Painel de Orientações
           </h1>
@@ -142,6 +144,8 @@ export function OrientadorDashboardClient({ nomeOrientador, tccs }: OrientadorDa
             Acompanhamento dos seus orientandos por status de entrega no semestre selecionado
           </p>
         </div>
+      )}
+      <div className={`flex justify-end pb-4 ${!ocultarCabecalho ? "border-b border-[#dfe2e8] mb-6" : "mb-4"}`}>
         <SemestreSelector
           semestreAtivo={semestreAtivo}
           semestresDisponiveis={semestresDisponiveis}

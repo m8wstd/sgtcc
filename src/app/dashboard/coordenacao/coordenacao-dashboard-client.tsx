@@ -1,25 +1,16 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import Link from "next/link";
-import { StatCard } from "@/components/ui/stat-card";
-import { StatusPill } from "@/components/ui/status-pill";
-import { SemestreSelector } from "@/components/ui/semestre-selector";
-import { semestreAtual, derivarSemestreTcc, compararSemestres } from "@/lib/semestre";
-import { ROTULO_STATUS_TCC } from "@/components/layout/status";
+import React, { useState } from "react";
+import { semestreAtual } from "@/lib/semestre";
 import type { TccResumo } from "@/lib/data/queries";
 import {
-  Search,
-  ChevronRight,
-  GraduationCap,
-  Users,
   Calendar,
   FileSpreadsheet,
+  Plus,
   Award,
   X,
   Check,
   AlertTriangle,
-  Clock,
   Layers,
   ChevronDown,
   ChevronUp,
@@ -29,42 +20,48 @@ interface CoordenacaoDashboardClientProps {
   nomeUsuario: string;
   perfil: "COORDENACAO" | "ADMIN";
   tccs: TccResumo[];
+  cursosCoordenados?: string[];
 }
 
-type PainelAcaoTipo = "alocacao" | "avaliadores" | "cronograma" | null;
+type PainelAcaoTipo = "alocacao" | "avaliadores" | "cronograma" | "novo_tcc" | null;
+
+const TODOS_CURSOS_INSTITUICAO = [
+  "Engenharia de Software",
+  "Sistemas de Informação",
+  "Ciência da Computação",
+  "Engenharia de Computação",
+  "Enfermagem",
+  "Medicina",
+  "Direito",
+  "Administração",
+];
 
 export function CoordenacaoDashboardClient({
   nomeUsuario: _nomeUsuario,
-  perfil: _perfil,
+  perfil,
   tccs: tccsIniciais,
+  cursosCoordenados = [],
 }: CoordenacaoDashboardClientProps) {
+  // Lista de cursos disponíveis:
+  // Se for coordenação e tiver cursos definidos, restringe estritamente aos seus cursos.
+  // Se for ADMIN (ou coordenação sem restrição), tem acesso a todos os cursos institucionais.
+  const cursosDisponiveis = React.useMemo(() => {
+    if (perfil === "COORDENACAO" && cursosCoordenados && cursosCoordenados.length > 0) {
+      return cursosCoordenados;
+    }
+    return TODOS_CURSOS_INSTITUICAO;
+  }, [perfil, cursosCoordenados]);
   const [tccs, setTccs] = useState<TccResumo[]>(tccsIniciais);
 
-  const semestresDisponiveis = useMemo(() => {
-    const setS = new Set<string>();
-    setS.add(semestreAtual());
-    tccs.forEach((t) => {
-      setS.add(derivarSemestreTcc(t));
-    });
-    return Array.from(setS).sort(compararSemestres);
-  }, [tccs]);
-
-  const [semestreAtivo, setSemestreAtivo] = useState<string>(semestreAtual());
-  const [busca, setBusca] = useState("");
-  const [statusFiltro, setStatusFiltro] = useState<string>("todos");
-  const [cursoFiltro, setCursoFiltro] = useState<string>("todos");
-  const [faseFiltro, setFaseFiltro] = useState<"todas" | "1" | "2">("todas");
-  const [vistaAtiva, setVistaAtiva] = useState<"tccs" | "docentes">("tccs");
-
-  // TCCs pertencentes ao semestre ativo selecionado
-  const tccsDoSemestre = useMemo(() => {
-    return tccs.filter((t) => derivarSemestreTcc(t) === semestreAtivo);
-  }, [tccs, semestreAtivo]);
-
-  // Mini Painel Acoplado de Ações da Coordenação
-  const [painelAcaoAtivo, setPainelAcaoAtivo] = useState<PainelAcaoTipo>(null);
+  // Painel de Operações da Coordenação
+  const [painelAcaoAtivo, setPainelAcaoAtivo] = useState<PainelAcaoTipo>("novo_tcc");
   const [alertaSucesso, setAlertaSucesso] = useState<string | null>(null);
   const [alertaErro, setAlertaErro] = useState<string | null>(null);
+
+  const _avisar = (msg: string) => {
+    setAlertaSucesso(msg);
+    setTimeout(() => setAlertaSucesso(null), 5000);
+  };
 
   // Lista de orientadores cadastrados no sistema
   const [orientadoresSistema, setOrientadoresSistema] = useState<Array<{
@@ -81,8 +78,35 @@ export function CoordenacaoDashboardClient({
     usuario_id: string;
     nome: string;
     email: string;
+    cursos?: string[];
   }>>([]);
   const [carregandoAvaliadores, setCarregandoAvaliadores] = useState(false);
+
+  // Lista de alunos cadastrados no sistema para vincular ao TCC
+  const [alunosSistema, setAlunosSistema] = useState<Array<{
+    id: string;
+    matricula: string;
+    nome: string;
+    email: string;
+    curso: string;
+    temTcc: boolean;
+  }>>([]);
+  const [carregandoAlunos, setCarregandoAlunos] = useState(false);
+
+  // Estados do formulário de Novo TCC
+  const [novoTccTitulo, setNovoTccTitulo] = useState("");
+  const [novoTccAlunosIds, setNovoTccAlunosIds] = useState<string[]>([]);
+  const [novoTccOrientadorId, setNovoTccOrientadorId] = useState("");
+  const [modalAvaliadoresTccId, setModalAvaliadoresTccId] = useState<string | null>(null);
+  const [novoTccCurso, setNovoTccCurso] = useState(() => {
+    if (perfil === "COORDENACAO" && cursosCoordenados && cursosCoordenados.length > 0) {
+      return cursosCoordenados[0];
+    }
+    return "Engenharia de Software";
+  });
+  const [novoTccFase, setNovoTccFase] = useState<1 | 2>(1);
+  const [novoTccSemestre, setNovoTccSemestre] = useState(semestreAtual());
+  const [salvandoNovoTcc, setSalvandoNovoTcc] = useState(false);
 
   // Estados da Alocação de Docentes Orientadores
   const [alocacaoMapeamento, setAlocacaoMapeamento] = useState<Record<string, string>>({});
@@ -137,10 +161,25 @@ export function CoordenacaoDashboardClient({
       .finally(() => setCarregandoAvaliadores(false));
   }, []);
 
+  // Carregar alunos da API
+  const carregarAlunos = React.useCallback(() => {
+    setCarregandoAlunos(true);
+    fetch("/api/coordenacao/alunos")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.alunos && Array.isArray(data.alunos)) {
+          setAlunosSistema(data.alunos);
+        }
+      })
+      .catch((err) => console.error("Falha ao carregar alunos:", err))
+      .finally(() => setCarregandoAlunos(false));
+  }, []);
+
   React.useEffect(() => {
     carregarOrientadores();
     carregarAvaliadores();
-  }, [carregarOrientadores, carregarAvaliadores]);
+    carregarAlunos();
+  }, [carregarOrientadores, carregarAvaliadores, carregarAlunos]);
 
   // Carregar cronograma real da API
   React.useEffect(() => {
@@ -224,148 +263,6 @@ export function CoordenacaoDashboardClient({
   };
 
 
-  /**
-   * Bug 1 – Retorna o rótulo correto do status para exibição no card,
-   * levando em conta o filtro ativo (sub-status como AGUARDANDO_ENVIO e ATRASADAS
-   * não existem em statusGeral; precisam de rótulo explícito).
-   */
-  function rotuloStatusCard(tcc: TccResumo): string {
-    if (statusFiltro === "AGUARDANDO_ENVIO" &&
-        tcc.statusGeral === "EM_ANDAMENTO" &&
-        (!tcc.versaoFinalUrl || tcc.fase === 1)) {
-      return "Aguardando envio";
-    }
-    if (statusFiltro === "ATRASADAS" &&
-        tcc.statusGeral === "EM_ANDAMENTO" &&
-        tcc.id.includes("maria")) {
-      return "Atrasada";
-    }
-    return ROTULO_STATUS_TCC[tcc.statusGeral] ?? tcc.statusGeral;
-  }
-
-  /**
-   * Bug 3 – Cor e rótulo da etapa atual do TCC para exibição no card.
-   * Inferimos a etapa com base nos dados disponíveis no TccResumo.
-   */
-  type EtapaVisual = {
-    rotulo: string;
-    bg: string;
-    text: string;
-  };
-  function etapaVisual(tcc: TccResumo): EtapaVisual {
-    if (tcc.statusGeral === "APROVADO" || tcc.statusGeral === "DEFENDIDO") {
-      return { rotulo: "Concluído", bg: "bg-[#86d994]", text: "text-[#111a2e]" };
-    }
-    if (tcc.statusGeral === "REPROVADO") {
-      return { rotulo: "Reprovado", bg: "bg-[#ff7f7f]", text: "text-[#111a2e]" };
-    }
-    if (tcc.statusGeral === "AGUARDANDO_BANCA") {
-      return { rotulo: "Aguardando banca", bg: "bg-[#d8b4fe]", text: "text-[#111a2e]" };
-    }
-    // EM_ANDAMENTO — detectar sub-estado
-    if (tcc.statusGeral === "EM_ANDAMENTO") {
-      // Atrasada
-      if (tcc.id.includes("maria")) {
-        return { rotulo: "Entrega atrasada", bg: "bg-[#ff7f7f]", text: "text-[#111a2e]" };
-      }
-      // Fase 2 com versão final → quase concluído
-      if (tcc.fase === 2 && tcc.versaoFinalUrl) {
-        return { rotulo: "Versão final enviada", bg: "bg-[#86d994]", text: "text-[#111a2e]" };
-      }
-      // Aguardando envio
-      if (!tcc.versaoFinalUrl || tcc.fase === 1) {
-        return { rotulo: "Aguardando envio", bg: "bg-[#a5b4fc]", text: "text-[#111a2e]" };
-      }
-      return { rotulo: "Em andamento", bg: "bg-[#8ec5ff]", text: "text-[#111a2e]" };
-    }
-    return { rotulo: tcc.statusGeral, bg: "bg-[#d5d9e0]", text: "text-[#111a2e]" };
-  }
-
-  const _avisar = (msg: string) => {
-    setAlertaSucesso(msg);
-    setTimeout(() => setAlertaSucesso(null), 5000);
-  };
-
-  const docentesAtivos = useMemo(() => {
-    const m = new Map<string, { nome: string; total: number; emAndamento: number; aguardandoBanca: number; concluidos: number }>();
-    tccs.forEach((t) => {
-      const atual = m.get(t.orientadorNome) ?? { nome: t.orientadorNome, total: 0, emAndamento: 0, aguardandoBanca: 0, concluidos: 0 };
-      atual.total += 1;
-      if (t.statusGeral === "EM_ANDAMENTO") atual.emAndamento += 1;
-      else if (t.statusGeral === "AGUARDANDO_BANCA") atual.aguardandoBanca += 1;
-      else if (t.statusGeral === "APROVADO" || t.statusGeral === "DEFENDIDO") atual.concluidos += 1;
-      m.set(t.orientadorNome, atual);
-    });
-    return Array.from(m.values()).sort((a, b) => b.total - a.total);
-  }, [tccs]);
-
-  const cursosDisponiveis = useMemo(() => {
-    const setC = new Set<string>();
-    tccsDoSemestre.forEach((t) => {
-      if (t.curso) setC.add(t.curso);
-    });
-    return Array.from(setC);
-  }, [tccsDoSemestre]);
-
-  const stats = useMemo(() => {
-    const totalTccs = tccsDoSemestre.length;
-    const emAndamento = tccsDoSemestre.filter((t) => t.statusGeral === "EM_ANDAMENTO").length;
-    const aguardandoBanca = tccsDoSemestre.filter((t) => t.statusGeral === "AGUARDANDO_BANCA").length;
-    const aguardandoEnvio = tccsDoSemestre.filter(
-      (t) => t.statusGeral === "EM_ANDAMENTO" && (!t.versaoFinalUrl || t.fase === 1)
-    ).length;
-    // TCCs com entrega atrasada simulados no universo de em andamento sem versão final
-    const entregasAtrasadas = tccsDoSemestre.filter(
-      (t) => t.statusGeral === "EM_ANDAMENTO" && t.id.includes("maria")
-    ).length;
-    const concluidos = tccsDoSemestre.filter(
-      (t) => t.statusGeral === "APROVADO" || t.statusGeral === "DEFENDIDO"
-    ).length;
-    const orientadoresUnicos = new Set(tccsDoSemestre.map((t) => t.orientadorNome)).size;
-
-    return {
-      totalTccs,
-      emAndamento,
-      aguardandoBanca,
-      aguardandoEnvio,
-      entregasAtrasadas,
-      concluidos,
-      orientadoresUnicos,
-    };
-  }, [tccsDoSemestre]);
-
-  const tccsFiltrados = useMemo(() => {
-    return tccsDoSemestre.filter((t) => {
-      let matchStatus = true;
-      if (statusFiltro === "todos") {
-        matchStatus = true;
-      } else if (statusFiltro === "AGUARDANDO_ENVIO") {
-        matchStatus = t.statusGeral === "EM_ANDAMENTO" && (!t.versaoFinalUrl || t.fase === 1);
-      } else if (statusFiltro === "ATRASADAS") {
-        matchStatus = t.statusGeral === "EM_ANDAMENTO" && t.id.includes("maria");
-      } else {
-        matchStatus = t.statusGeral === statusFiltro;
-      }
-
-      const matchCurso = cursoFiltro === "todos" ? true : t.curso === cursoFiltro;
-      const matchFase =
-        faseFiltro === "todas"
-          ? true
-          : faseFiltro === "1"
-          ? t.fase === 1 || !t.fase
-          : t.fase === 2;
-
-      const termo = busca.toLowerCase();
-      const matchBusca =
-        !termo ||
-        t.titulo.toLowerCase().includes(termo) ||
-        t.alunoNome.toLowerCase().includes(termo) ||
-        t.aluno_id.toLowerCase().includes(termo) ||
-        t.orientadorNome.toLowerCase().includes(termo);
-
-      return matchStatus && matchCurso && matchFase && matchBusca;
-    });
-  }, [tccsDoSemestre, statusFiltro, cursoFiltro, faseFiltro, busca]);
 
   const handleSalvarAvaliadoresTcc = async (tccId: string) => {
     const selecionados = alocacaoAvaliadoresMapeamento[tccId] ?? [];
@@ -463,23 +360,89 @@ export function CoordenacaoDashboardClient({
     setPainelAcaoAtivo((prev) => (prev === tipo ? null : tipo));
   };
 
+  const handleCriarNovoTcc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!novoTccTitulo.trim()) {
+      setAlertaErro("Informe o título do TCC.");
+      return;
+    }
+    if (novoTccAlunosIds.length === 0) {
+      setAlertaErro("Selecione pelo menos um aluno para vincular ao TCC.");
+      return;
+    }
+    if (!novoTccOrientadorId) {
+      setAlertaErro("Selecione um professor orientador.");
+      return;
+    }
+
+    const alunosSelecionados = alunosSistema.filter((a) =>
+      novoTccAlunosIds.includes(a.id) || novoTccAlunosIds.includes(a.matricula)
+    );
+    const orientadorSelecionado = orientadoresSistema.find(
+      (o) => o.id === novoTccOrientadorId || o.usuario_id === novoTccOrientadorId
+    );
+
+    setSalvandoNovoTcc(true);
+    setAlertaErro(null);
+
+    try {
+      const res = await fetch("/api/coordenacao/tcc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titulo: novoTccTitulo.trim(),
+          alunos: alunosSelecionados.map((a) => ({ matricula: a.matricula, uid: a.id })),
+          orientadorId: novoTccOrientadorId,
+          curso: novoTccCurso,
+          fase: novoTccFase,
+          semestre: novoTccSemestre,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.message || "Falha ao criar e vincular TCC.");
+      }
+
+      // Adiciona o novo TCC à lista local
+      if (data?.tcc) {
+        const nomesAlunos = alunosSelecionados.map((a) => a.nome).join(", ");
+        const novoResumo: TccResumo = {
+          ...data.tcc,
+          alunoNome: nomesAlunos || "Aluno(s)",
+          orientadorNome: orientadorSelecionado?.nome || "Docente",
+        };
+        setTccs((prev) => [novoResumo, ...prev]);
+      }
+
+      setAlertaSucesso("Novo TCC criado e vinculado ao cronograma com sucesso!");
+      setTimeout(() => setAlertaSucesso(null), 5000);
+
+      // Reseta form
+      setNovoTccTitulo("");
+      setNovoTccAlunosIds([]);
+      setPainelAcaoAtivo(null);
+      carregarAlunos();
+    } catch (err) {
+      setAlertaErro(err instanceof Error ? err.message : "Erro ao criar TCC.");
+      setTimeout(() => setAlertaErro(null), 5000);
+    } finally {
+      setSalvandoNovoTcc(false);
+    }
+  };
+
+
+
   return (
     <div className="space-y-6 w-full">
       {/* Cabeçalho */}
-      <div className="border-b border-[#dfe2e8] pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
-            Painel da Coordenação de TCC
-          </h1>
-          <p className="text-sm text-[#6b7385] mt-1">
-            Gestão centralizada de orientações, alocações semestrais, prazos institucionais e resolução de conflitos acadêmicos
-          </p>
-        </div>
-        <SemestreSelector
-          semestreAtivo={semestreAtivo}
-          semestresDisponiveis={semestresDisponiveis}
-          onChange={setSemestreAtivo}
-        />
+      <div className="border-b border-[#dfe2e8] pb-4">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#111a2e]">
+          Painel de Operações da Coordenação
+        </h1>
+        <p className="text-sm text-[#6b7385] mt-1">
+          Gerencie o cadastro de novos TCCs, alocação de orientadores, bancas avaliadoras e cronograma oficial.
+        </p>
       </div>
 
       {alertaSucesso && (
@@ -501,64 +464,6 @@ export function CoordenacaoDashboardClient({
         </div>
       )}
 
-      {/* Cards de Métricas da Coordenação com Atalhos Interativos */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-        <StatCard
-          label="Total de Orientações"
-          value={stats.totalTccs}
-          variant="primary"
-          icon={<GraduationCap className="w-4 h-4" />}
-          className="p-4"
-          onClick={() => { setStatusFiltro("todos"); setVistaAtiva("tccs"); }}
-          active={statusFiltro === "todos" && vistaAtiva === "tccs"}
-        />
-        <StatCard
-          label="Em Andamento"
-          value={stats.emAndamento}
-          variant="blue"
-          className="p-4"
-          onClick={() => { setStatusFiltro(statusFiltro === "EM_ANDAMENTO" ? "todos" : "EM_ANDAMENTO"); setVistaAtiva("tccs"); }}
-          active={statusFiltro === "EM_ANDAMENTO" && vistaAtiva === "tccs"}
-        />
-        <StatCard
-          label="Aguardando Envio"
-          value={stats.aguardandoEnvio}
-          variant="indigo"
-          icon={<Clock className="w-4 h-4" />}
-          className="p-4"
-          onClick={() => { setStatusFiltro(statusFiltro === "AGUARDANDO_ENVIO" ? "todos" : "AGUARDANDO_ENVIO"); setVistaAtiva("tccs"); }}
-          active={statusFiltro === "AGUARDANDO_ENVIO" && vistaAtiva === "tccs"}
-        />
-        <StatCard
-          label="Entregas Atrasadas"
-          value={stats.entregasAtrasadas}
-          variant="red"
-          icon={<AlertTriangle className="w-4 h-4" />}
-          className="p-4"
-          onClick={() => { setStatusFiltro(statusFiltro === "ATRASADAS" ? "todos" : "ATRASADAS"); setVistaAtiva("tccs"); }}
-          active={statusFiltro === "ATRASADAS" && vistaAtiva === "tccs"}
-        />
-        <StatCard
-          label="Aguardando Banca"
-          value={stats.aguardandoBanca}
-          variant="purple"
-          className="p-4"
-          onClick={() => { setStatusFiltro(statusFiltro === "AGUARDANDO_BANCA" ? "todos" : "AGUARDANDO_BANCA"); setVistaAtiva("tccs"); }}
-          active={statusFiltro === "AGUARDANDO_BANCA" && vistaAtiva === "tccs"}
-        />
-        <StatCard
-          label="Docentes Ativos"
-          value={stats.orientadoresUnicos}
-          variant="green"
-          icon={<Users className="w-4 h-4" />}
-          className="p-4"
-          onClick={() => {
-            setVistaAtiva((v) => (v === "docentes" ? "tccs" : "docentes"));
-          }}
-          active={vistaAtiva === "docentes"}
-        />
-      </div>
-
       {/* Mini Painel Acoplado de Gestão da Coordenação */}
       <section className="rounded-2xl border border-[#dfe2e8] bg-white overflow-hidden shadow-xs transition-all">
         {/* Barra Integrada de Botões das Funções */}
@@ -571,6 +476,24 @@ export function CoordenacaoDashboardClient({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => alternarPainelAcao("novo_tcc")}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                painelAcaoAtivo === "novo_tcc"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-white border border-[#dfe2e8] text-[#111a2e] hover:bg-[#f0f2f5]"
+              }`}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Novo TCC</span>
+              {painelAcaoAtivo === "novo_tcc" ? (
+                <ChevronUp className="w-3 h-3" />
+              ) : (
+                <ChevronDown className="w-3 h-3 text-[#6b7385]" />
+              )}
+            </button>
+
             <button
               type="button"
               onClick={() => alternarPainelAcao("alocacao")}
@@ -626,6 +549,216 @@ export function CoordenacaoDashboardClient({
             </button>
           </div>
         </div>
+
+        {/* Conteúdo Dinâmico Acoplado (sem pop-ups flutuantes) */}
+        {painelAcaoAtivo === "novo_tcc" && (
+          <div className="p-3.5 sm:p-5 bg-emerald-50/20 border-b border-[#dfe2e8] space-y-4 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-emerald-100 text-emerald-700">
+                  <Plus className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#111a2e]">
+                    Cadastrar Novo TCC
+                  </h3>
+                  <p className="text-xs text-[#6b7385]">
+                    Vincule um aluno recém-cadastrado ao seu orientador, definindo curso, fase e semestre de acompanhamento.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPainelAcaoAtivo(null)}
+                className="p-1 rounded-md text-[#6b7385] hover:bg-[#e5e7eb] cursor-pointer"
+                title="Recolher painel"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCriarNovoTcc} className="bg-white p-3 sm:p-4 rounded-xl border border-[#dfe2e8] space-y-3.5 sm:space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {/* Título do TCC */}
+                <div className="space-y-1 lg:col-span-3">
+                  <label className="text-xs font-semibold text-[#111a2e]">
+                    Título Provisório / Definitivo do TCC <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: Arquitetura de Microsserviços para Plataformas Educacionais"
+                    value={novoTccTitulo}
+                    onChange={(e) => setNovoTccTitulo(e.target.value)}
+                    className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg bg-white text-[#111a2e] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+
+                {/* Seleção de Alunos (Múltiplos Autores) */}
+                <div className="space-y-1 lg:col-span-2 min-w-0 max-w-full">
+                  <div className="flex flex-wrap items-center justify-between gap-1">
+                    <label className="text-xs font-semibold text-[#111a2e]">
+                      Alunos / Autores do TCC <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[11px] text-[#6b7385]">
+                      {novoTccAlunosIds.length === 0
+                        ? "Nenhum aluno selecionado"
+                        : `${novoTccAlunosIds.length} selecionado(s)`}
+                    </span>
+                  </div>
+
+                  {/* Dropdown de adição de alunos */}
+                  <div className="w-full min-w-0">
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const selId = e.target.value;
+                        if (!selId) return;
+                        if (!novoTccAlunosIds.includes(selId)) {
+                          setNovoTccAlunosIds((prev) => [...prev, selId]);
+                          const al = alunosSistema.find((a) => a.id === selId || a.matricula === selId);
+                          if (al?.curso && novoTccAlunosIds.length === 0) {
+                            if (cursosDisponiveis.includes(al.curso)) {
+                              setNovoTccCurso(al.curso);
+                            }
+                          }
+                        }
+                      }}
+                      className="w-full max-w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg bg-white text-[#111a2e] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer truncate"
+                    >
+                      <option value="">
+                        {carregandoAlunos ? "Carregando alunos..." : "+ Adicionar aluno ao trabalho..."}
+                      </option>
+                      {alunosSistema
+                        .filter((a) => !novoTccAlunosIds.includes(a.id) && !novoTccAlunosIds.includes(a.matricula))
+                        .map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.nome} ({a.matricula}){a.temTcc ? " • Com TCC" : ""}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  {/* Tags com os alunos adicionados */}
+                  {novoTccAlunosIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1.5 max-w-full overflow-hidden">
+                      {novoTccAlunosIds.map((id) => {
+                        const al = alunosSistema.find((a) => a.id === id || a.matricula === id);
+                        return (
+                          <span
+                            key={id}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 max-w-full"
+                          >
+                            <span className="truncate max-w-[200px] sm:max-w-xs">{al?.nome ?? id}</span>
+                            <button
+                              type="button"
+                              onClick={() => setNovoTccAlunosIds((prev) => prev.filter((x) => x !== id))}
+                              className="text-emerald-700 hover:text-emerald-900 cursor-pointer shrink-0"
+                              title="Remover aluno"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Seleção de Orientador */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-[#111a2e]">
+                    Professor Orientador <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={novoTccOrientadorId}
+                    onChange={(e) => setNovoTccOrientadorId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg bg-white text-[#111a2e] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer"
+                  >
+                    <option value="">
+                      {carregandoOrientadores ? "Carregando orientadores..." : "Selecione o docente orientador"}
+                    </option>
+                    {orientadoresSistema.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.nome} {o.email ? `(${o.email})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Curso — Restrito aos cursos que o coordenador coordena */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-[#111a2e]">
+                      Curso <span className="text-red-500">*</span>
+                    </label>
+                    {perfil === "COORDENACAO" && cursosCoordenados.length > 0 && (
+                      <span className="text-[10px] text-[#1e78f0] font-semibold">
+                        (Restrito à sua coordenação)
+                      </span>
+                    )}
+                  </div>
+                  <select
+                    required
+                    value={novoTccCurso}
+                    onChange={(e) => setNovoTccCurso(e.target.value)}
+                    className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg bg-white text-[#111a2e] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer"
+                  >
+                    {cursosDisponiveis.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Fase */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-[#111a2e]">Fase do TCC</label>
+                  <select
+                    value={novoTccFase}
+                    onChange={(e) => setNovoTccFase(Number(e.target.value) as 1 | 2)}
+                    className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg bg-white text-[#111a2e] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 cursor-pointer"
+                  >
+                    <option value={1}>TCC 1 (Proposta / Projeto Preliminar)</option>
+                    <option value={2}>TCC 2 (Monografia Final / Defesa de Banca)</option>
+                  </select>
+                </div>
+
+                {/* Semestre de Vínculo */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-[#111a2e]">Semestre Letivo</label>
+                  <input
+                    type="text"
+                    value={novoTccSemestre}
+                    onChange={(e) => setNovoTccSemestre(e.target.value)}
+                    placeholder="Ex: 2026/2"
+                    className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg bg-white text-[#111a2e] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-3 border-t border-[#dfe2e8]">
+                <button
+                  type="button"
+                  onClick={() => setPainelAcaoAtivo(null)}
+                  className="w-full sm:w-auto px-3.5 py-2 sm:py-1.5 rounded-lg border border-[#dfe2e8] bg-white text-xs font-semibold text-[#6b7385] hover:bg-[#f4f5f7] cursor-pointer text-center"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={salvandoNovoTcc || !novoTccTitulo.trim() || novoTccAlunosIds.length === 0 || !novoTccOrientadorId}
+                  className="w-full sm:w-auto px-4 py-2 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{salvandoNovoTcc ? "Criando TCC..." : "Confirmar e Criar TCC"}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
         {/* Conteúdo Dinâmico Acoplado (sem pop-ups flutuantes) */}
         {painelAcaoAtivo === "alocacao" && (
@@ -765,38 +898,45 @@ export function CoordenacaoDashboardClient({
                           </div>
 
                           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                            {/* Tags dos professores já adicionados à banca */}
                             <div className="flex flex-wrap items-center gap-1.5 max-w-md">
-                              {avaliadoresSistema.length === 0 ? (
-                                <span className="text-[11px] text-[#6b7385]">Nenhum avaliador cadastrado.</span>
-                              ) : (
-                                avaliadoresSistema.map((av) => {
-                                  const marcado = selecionados.includes(av.usuario_id || av.id);
-                                  return (
+                              {selecionados.map((uid) => {
+                                const av = avaliadoresSistema.find((a) => (a.usuario_id || a.id) === uid);
+                                const nome = av?.nome ?? `Prof. ${uid.slice(0, 6)}`;
+                                return (
+                                  <span
+                                    key={uid}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200"
+                                  >
+                                    <span>{nome}</span>
                                     <button
-                                      key={av.id}
                                       type="button"
                                       onClick={() => {
-                                        const uid = av.usuario_id || av.id;
-                                        const novo = marcado
-                                          ? selecionados.filter((x) => x !== uid)
-                                          : [...selecionados, uid];
+                                        const novo = selecionados.filter((x) => x !== uid);
                                         setAlocacaoAvaliadoresMapeamento((prev) => ({
                                           ...prev,
                                           [t.id]: novo,
                                         }));
                                       }}
-                                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
-                                        marcado
-                                          ? "bg-purple-600 text-white border-purple-600 shadow-2xs"
-                                          : "bg-white text-[#6b7385] border-[#dfe2e8] hover:border-purple-300 hover:text-[#111a2e]"
-                                      }`}
+                                      className="text-purple-600 hover:text-purple-900 cursor-pointer"
+                                      title="Remover avaliador"
                                     >
-                                      {marcado ? "✓ " : "+ "}
-                                      {av.nome.split(" ")[0]} {av.nome.split(" ")[1] ?? ""}
+                                      <X className="w-3 h-3" />
                                     </button>
-                                  );
-                                })
-                              )}
+                                  </span>
+                                );
+                              })}
+
+                              {/* Botão de + para abrir modal com professores disponíveis */}
+                              <button
+                                type="button"
+                                onClick={() => setModalAvaliadoresTccId(t.id)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-white text-[#111a2e] border border-[#dfe2e8] hover:border-purple-400 hover:text-purple-700 transition-colors cursor-pointer shadow-2xs"
+                                title="Adicionar avaliadores da banca"
+                              >
+                                <Plus className="w-3.5 h-3.5 text-purple-600" />
+                                <span>{selecionados.length === 0 ? "Adicionar Avaliadores" : "+ Adicionar"}</span>
+                              </button>
                             </div>
 
                             <button
@@ -1065,265 +1205,101 @@ export function CoordenacaoDashboardClient({
           </div>
         )}
       </section>
+      {/* Modal / Popup de Seleção de Avaliadores Disponíveis do Curso */}
+      {modalAvaliadoresTccId && (() => {
+        const tccAtivo = tccs.find((t) => t.id === modalAvaliadoresTccId);
+        const selecionadosAtuais = alocacaoAvaliadoresMapeamento[modalAvaliadoresTccId] ?? tccAtivo?.avaliadoresUids ?? [];
+        const cursoDoTcc = tccAtivo?.curso;
 
-      {/* Barra de Filtros: Fase, Curso, Status e Busca */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 pt-1">
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Fase */}
-          <div className="flex items-center gap-1 bg-[#f4f5f7] p-1 rounded-lg border border-[#dfe2e8]">
-            <button
-              type="button"
-              onClick={() => setFaseFiltro("todas")}
-              className={`px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                faseFiltro === "todas" ? "bg-[#0f1b33] text-white shadow-xs" : "text-[#111a2e] hover:bg-white"
-              }`}
-            >
-              Todas
-            </button>
-            <button
-              type="button"
-              onClick={() => setFaseFiltro("1")}
-              className={`px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                faseFiltro === "1" ? "bg-[#1e78f0] text-white shadow-xs" : "text-[#111a2e] hover:bg-white"
-              }`}
-            >
-              TCC 1
-            </button>
-            <button
-              type="button"
-              onClick={() => setFaseFiltro("2")}
-              className={`px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                faseFiltro === "2" ? "bg-[#1e78f0] text-white shadow-xs" : "text-[#111a2e] hover:bg-white"
-              }`}
-            >
-              TCC 2
-            </button>
-          </div>
+        // Filtra professores disponíveis: prioriza professores com o curso do aluno, ou lista todos se nenhum tiver
+        const avaliadoresDoCurso = avaliadoresSistema.filter((av) => {
+          if (!cursoDoTcc) return true;
+          if (!av.cursos || av.cursos.length === 0) return true;
+          return av.cursos.includes(cursoDoTcc);
+        });
 
-          {/* Filtro por Curso */}
-          {cursosDisponiveis.length > 0 && (
-            <select
-              value={cursoFiltro}
-              onChange={(e) => setCursoFiltro(e.target.value)}
-              className="text-xs bg-white border border-[#dfe2e8] rounded-lg px-3 py-1.5 font-medium text-[#111a2e] focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
-            >
-              <option value="todos">Todos os Cursos</option>
-              {cursosDisponiveis.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          )}
+        const listaExibicao = avaliadoresDoCurso.length > 0 ? avaliadoresDoCurso : avaliadoresSistema;
 
-          {/* Status Geral com opções de busca específicas */}
-          <select
-            value={statusFiltro}
-            onChange={(e) => { setStatusFiltro(e.target.value); setVistaAtiva("tccs"); }}
-            className="text-xs bg-white border border-[#dfe2e8] rounded-lg px-3 py-1.5 font-medium text-[#111a2e] focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
-          >
-            <option value="todos">Todos os Status</option>
-            <option value="EM_ANDAMENTO">Em Andamento</option>
-            <option value="AGUARDANDO_ENVIO">Aguardando Envio</option>
-            <option value="ATRASADAS">Entregas Atrasadas</option>
-            <option value="AGUARDANDO_BANCA">Aguardando Banca</option>
-            <option value="APROVADO">Aprovados / Finalizados</option>
-          </select>
-
-          {statusFiltro !== "todos" && (
-            <button
-              type="button"
-              onClick={() => { setStatusFiltro("todos"); setVistaAtiva("tccs"); }}
-              className="text-[11px] font-semibold text-[#1e78f0] hover:underline cursor-pointer"
-            >
-              Limpar filtro de status
-            </button>
-          )}
-        </div>
-
-        <div className="relative min-w-[240px] sm:w-80">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-[#6b7385]" />
-          <input
-            type="text"
-            placeholder="Buscar aluno, orientador, tema ou matrícula..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-xs bg-[#f4f5f7] border border-[#dfe2e8] rounded-full focus:outline-none focus:ring-1 focus:ring-[#1e78f0] focus:bg-white text-[#111a2e]"
-          />
-        </div>
-      </div>
-
-      {/* Bug 2 – Vista de Docentes Ativos */}
-      {vistaAtiva === "docentes" ? (
-        <div className="border border-[#dfe2e8] rounded-[10px] overflow-hidden bg-white shadow-xs">
-          <div className="px-6 py-3 bg-[#f4f5f7] border-b border-[#dfe2e8] flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-[#1e78f0]" />
-              <span className="text-xs font-bold text-[#111a2e] uppercase tracking-wider">
-                Docentes Ativos — {docentesAtivos.length} professor{docentesAtivos.length !== 1 ? "es" : ""}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setVistaAtiva("tccs")}
-              className="text-[11px] font-semibold text-[#1e78f0] hover:underline cursor-pointer flex items-center gap-1"
-            >
-              <X className="w-3 h-3" /> Voltar para lista de TCCs
-            </button>
-          </div>
-
-          {docentesAtivos.length === 0 ? (
-            <div className="p-10 text-center text-sm text-[#6b7385]">
-              Nenhum docente encontrado.
-            </div>
-          ) : (
-            <div className="divide-y divide-[#dfe2e8]">
-              {/* Cabeçalho */}
-              <div className="hidden md:grid grid-cols-[2fr_80px_90px_100px_90px] gap-4 px-6 py-2.5 text-xs font-semibold text-[#6b7385]">
-                <span>Docente</span>
-                <span className="text-center">Total</span>
-                <span className="text-center">Em andamento</span>
-                <span className="text-center">Ag. Banca</span>
-                <span className="text-center">Concluídos</span>
-              </div>
-              {docentesAtivos.map((d) => (
-                <div
-                  key={d.nome}
-                  className="px-4 sm:px-6 py-3.5 flex flex-col md:grid md:grid-cols-[2fr_80px_90px_100px_90px] gap-2 md:gap-4 md:items-center"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-full bg-[#1e78f0]/10 flex items-center justify-center shrink-0">
-                      <span className="text-[11px] font-bold text-[#1e78f0]">
-                        {d.nome.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="min-w-0">
-                      <b className="text-sm font-semibold text-[#111a2e] block truncate">{d.nome}</b>
-                      <small className="text-xs text-[#6b7385]">Professor Orientador</small>
-                    </div>
-                  </div>
-
-                  {/* Mobile: badges inline */}
-                  <div className="flex flex-wrap gap-2 md:contents">
-                    <span className="md:text-center text-xs font-bold text-[#111a2e] bg-[#8ec5ff]/70 px-2.5 py-1 rounded-full md:bg-transparent md:px-0 md:py-0 md:rounded-none">
-                      <span className="md:hidden text-[10px] font-normal text-[#6b7385] mr-1">Total:</span>
-                      {d.total}
-                    </span>
-                    <span className="md:text-center text-xs font-semibold text-[#111a2e] bg-[#ffd84d]/70 px-2.5 py-1 rounded-full md:bg-transparent md:px-0 md:py-0 md:rounded-none">
-                      <span className="md:hidden text-[10px] font-normal text-[#6b7385] mr-1">Em andamento:</span>
-                      {d.emAndamento}
-                    </span>
-                    <span className="md:text-center text-xs font-semibold text-[#111a2e] bg-[#d5d9e0]/70 px-2.5 py-1 rounded-full md:bg-transparent md:px-0 md:py-0 md:rounded-none">
-                      <span className="md:hidden text-[10px] font-normal text-[#6b7385] mr-1">Ag. Banca:</span>
-                      {d.aguardandoBanca}
-                    </span>
-                    <span className="md:text-center text-xs font-semibold text-[#111a2e] bg-[#86d994]/70 px-2.5 py-1 rounded-full md:bg-transparent md:px-0 md:py-0 md:rounded-none">
-                      <span className="md:hidden text-[10px] font-normal text-[#6b7385] mr-1">Concluídos:</span>
-                      {d.concluidos}
-                    </span>
-                  </div>
+        return (
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+            <div className="bg-white rounded-2xl border border-[#dfe2e8] shadow-xl max-w-lg w-full overflow-hidden space-y-0">
+              <div className="p-4 bg-[#f8f9fa] border-b border-[#dfe2e8] flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-[#111a2e]">
+                    Professores Disponíveis — Banca Examinadora
+                  </h3>
+                  <p className="text-xs text-[#6b7385] mt-0.5">
+                    {tccAtivo?.titulo} ({cursoDoTcc ?? "Todos os Cursos"})
+                  </p>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        /* Vista padrão – Lista de TCCs */
-        <div className="border border-[#dfe2e8] rounded-[10px] overflow-hidden bg-white shadow-xs">
-          <div className="hidden md:grid grid-cols-[1.5fr_2fr_1.4fr_130px_40px] gap-4 px-6 py-3 bg-[#f4f5f7] border-b border-[#dfe2e8] text-xs font-semibold text-[#6b7385]">
-            <span>Aluno</span>
-            <span>Tema / Projeto</span>
-            <span>Orientador Responsável</span>
-            <span>Status</span>
-            <span className="text-right">Ação</span>
-          </div>
+                <button
+                  type="button"
+                  onClick={() => setModalAvaliadoresTccId(null)}
+                  className="p-1 rounded-md text-[#6b7385] hover:bg-[#e5e7eb] cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
 
-          {tccsFiltrados.length === 0 ? (
-            <div className="p-10 text-center text-sm text-[#6b7385]">
-              Nenhum TCC encontrado para os filtros selecionados.
-            </div>
-          ) : (
-            <div className="divide-y divide-[#dfe2e8]">
-              {tccsFiltrados.map((t) => {
-                // Bug 1 – rótulo correto por filtro ativo
-                const statusRotulo = rotuloStatusCard(t);
-                // Bug 3 – badge de etapa colorido
-                const etapa = etapaVisual(t);
-
-                return (
-                  <Link
-                    key={t.id}
-                    href={`/dashboard/tcc/${t.id}`}
-                    className="block p-4 sm:px-6 sm:py-4 hover:bg-[#f4f5f7] transition-colors group cursor-pointer"
-                    title="Abrir TCC com visualização e recursos de orientação"
-                  >
-                    <div className="hidden md:grid grid-cols-[1.5fr_2fr_1.4fr_130px_40px] gap-4 items-center">
-                      <div className="min-w-0">
-                        <b className="block text-sm font-semibold text-[#111a2e] truncate group-hover:text-[#1e78f0] transition-colors">
-                          {t.alunoNome}
-                        </b>
-                        <small className="text-xs text-[#6b7385]">Matrícula: {t.aluno_id}</small>
-                      </div>
-
-                      <div className="min-w-0">
-                        <p className="text-xs text-[#111a2e] font-medium truncate">{t.titulo}</p>
-                        {/* Bug 3 – badge de etapa com cor contextual */}
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-[10px] font-bold text-[#1e78f0] bg-blue-50 px-1.5 py-0.5 rounded">
-                            {t.fase ? `TCC ${t.fase}` : "TCC 1"}
-                          </span>
-                          <span
-                            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${etapa.bg} ${etapa.text}`}
-                          >
-                            {etapa.rotulo}
-                          </span>
-                          {t.curso && <span className="text-[11px] text-[#6b7385]">&bull; {t.curso}</span>}
-                        </div>
-                      </div>
-
-                      <div className="min-w-0">
-                        <span className="text-xs text-[#111a2e] font-medium block truncate">
-                          {t.orientadorNome}
-                        </span>
-                        <small className="text-[11px] text-[#6b7385]">Professor Orientador</small>
-                      </div>
-
-                      <div>
-                        {/* Bug 1 – StatusPill com rótulo correto */}
-                        <StatusPill status={statusRotulo} />
-                      </div>
-
-                      <div className="flex justify-end">
-                        <ChevronRight className="w-4 h-4 text-[#6b7385] group-hover:text-[#1e78f0] group-hover:translate-x-0.5 transition-all" />
-                      </div>
-                    </div>
-
-                    {/* Mobile */}
-                    <div className="flex md:hidden flex-col gap-2.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <b className="text-sm font-semibold text-[#111a2e] block group-hover:text-[#1e78f0]">
-                            {t.alunoNome}
-                          </b>
-                          <small className="text-xs text-[#6b7385]">Orientador: {t.orientadorNome}</small>
-                        </div>
-                        <StatusPill status={statusRotulo} />
-                      </div>
-                      <p className="text-xs text-[#111a2e] line-clamp-2">{t.titulo}</p>
-                      {/* Bug 3 – badge de etapa mobile */}
-                      <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded self-start ${etapa.bg} ${etapa.text}`}
+              <div className="p-4 max-h-80 overflow-y-auto divide-y divide-[#f0f2f5] space-y-1">
+                {listaExibicao.length === 0 ? (
+                  <div className="text-center py-6 text-xs text-[#6b7385]">
+                    Nenhum professor encontrado para este curso.
+                  </div>
+                ) : (
+                  listaExibicao.map((av) => {
+                    const uid = av.usuario_id || av.id;
+                    const marcado = selecionadosAtuais.includes(uid);
+                    return (
+                      <div
+                        key={av.id}
+                        onClick={() => {
+                          const novo = marcado
+                            ? selecionadosAtuais.filter((x) => x !== uid)
+                            : [...selecionadosAtuais, uid];
+                          setAlocacaoAvaliadoresMapeamento((prev) => ({
+                            ...prev,
+                            [modalAvaliadoresTccId]: novo,
+                          }));
+                        }}
+                        className={`flex items-center justify-between p-2.5 rounded-lg cursor-pointer transition-colors ${
+                          marcado ? "bg-purple-50 text-purple-900" : "hover:bg-[#fafbfc] text-[#111a2e]"
+                        }`}
                       >
-                        {etapa.rotulo}
-                      </span>
-                    </div>
-                  </Link>
-                );
-              })}
+                        <div>
+                          <b className="text-xs font-semibold block">{av.nome}</b>
+                          <span className="text-[11px] text-[#6b7385]">
+                            {av.email || "Sem e-mail"} {av.cursos?.length ? `• ${av.cursos.join(", ")}` : ""}
+                          </span>
+                        </div>
+                        <div
+                          className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
+                            marcado
+                              ? "bg-purple-600 border-purple-600 text-white"
+                              : "border-[#dfe2e8] bg-white text-transparent"
+                          }`}
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="p-3 bg-[#f8f9fa] border-t border-[#dfe2e8] flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModalAvaliadoresTccId(null)}
+                  className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
+                >
+                  Concluir Seleção ({selecionadosAtuais.length})
+                </button>
+              </div>
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

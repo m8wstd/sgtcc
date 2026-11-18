@@ -16,13 +16,14 @@ export async function GET() {
   }
 
   try {
-    const [orientadoresSnap, usuariosSnap] = await Promise.all([
+    const [orientadoresSnap, usuariosOrientadorSnap, usuariosAvaliadorSnap] = await Promise.all([
       adminDb.collection("professores_orientadores").get(),
       adminDb.collection("usuarios").where("perfil", "==", PerfilEnum.ORIENTADOR).get(),
+      adminDb.collection("usuarios").where("perfil", "==", PerfilEnum.AVALIADOR).get(),
     ]);
 
     const nomesMap = new Map<string, { nome: string; email: string }>();
-    usuariosSnap.docs.forEach((doc) => {
+    [...usuariosOrientadorSnap.docs, ...usuariosAvaliadorSnap.docs].forEach((doc) => {
       const data = doc.data();
       nomesMap.set(doc.id, {
         nome: data.nome ?? "Docente",
@@ -44,7 +45,7 @@ export async function GET() {
     });
 
     // Se houver usuários com perfil ORIENTADOR que ainda não têm documento em professores_orientadores, inclua-os
-    usuariosSnap.docs.forEach((uDoc) => {
+    [...usuariosOrientadorSnap.docs, ...usuariosAvaliadorSnap.docs].forEach((uDoc) => {
       const jaExiste = orientadores.some((o) => o.usuario_id === uDoc.id || o.id === uDoc.id);
       if (!jaExiste) {
         const uData = uDoc.data();
