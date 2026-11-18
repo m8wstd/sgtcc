@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { enviarArquivoTcc, alterarStatusEntrega } from "@/lib/entregas/cliente-upload";
+import { enviarArquivoTcc } from "@/lib/entregas/cliente-upload";
 import { validarMetadadosArquivo } from "@/lib/entregas/regras";
 import Link from "next/link";
 import {
@@ -80,8 +80,8 @@ export function SalaEtapaView({
   const [materiais, setMateriais] = useState<MaterialApoio[]>(etapaInicial.materiaisFixados);
   const [mostrarFormMaterial, setMostrarFormMaterial] = useState(false);
   const [novoMaterialNome, setNovoMaterialNome] = useState("");
-  const [novoMaterialTipo, setNovoMaterialTipo] = useState("PDF");
-  const [novoMaterialTamanho, setNovoMaterialTamanho] = useState("1.5 MB");
+  const [novoMaterialArquivo, setNovoMaterialArquivo] = useState<File | null>(null);
+  const [enviandoMaterial, setEnviandoMaterial] = useState(false);
 
   // Postagens no Mural da Etapa
   const [postagens, setPostagens] = useState<PostagemSala[]>(etapaInicial.postagensProfessor);
@@ -141,85 +141,30 @@ export function SalaEtapaView({
     }
   };
 
-  // Orientador marca que está corrigindo -> move etapa para "Em correção" (chamada real persistida)
-  const handleMarcarEmCorrecao = async () => {
-    setErroStatus(null);
-    setAtualizandoStatus(true);
-    try {
-      const res = await fetch(`/api/tcc/${encodeURIComponent(tccId)}/marcos/${encodeURIComponent(marcoId)}/sala`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tipo: "MARCAR_STATUS",
-          novoStatus: "EM_REVISAO",
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || "Não foi possível atualizar o status.");
-      }
 
-      setStatusKanban("Em correção");
-      setSalvoSucesso(true);
-      router.refresh();
-      setTimeout(() => setSalvoSucesso(false), 4000);
-    } catch (e) {
-      setErroStatus(e instanceof Error ? e.message : "Não foi possível atualizar o status.");
-    } finally {
-      setAtualizandoStatus(false);
-    }
-  };
 
-  // Orientador marca etapa como concluída (chamada real persistida)
-  const handleMarcarConcluido = async () => {
-    setErroStatus(null);
-    setAtualizandoStatus(true);
-    try {
-      const res = await fetch(`/api/tcc/${encodeURIComponent(tccId)}/marcos/${encodeURIComponent(marcoId)}/sala`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tipo: "MARCAR_STATUS",
-          novoStatus: "CONCLUIDA",
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || "Não foi possível concluir a etapa.");
-      }
-
-      setStatusKanban("Concluído");
-      setSalvoSucesso(true);
-      router.refresh();
-      setTimeout(() => setSalvoSucesso(false), 4000);
-    } catch (e) {
-      setErroStatus(e instanceof Error ? e.message : "Não foi possível concluir a etapa.");
-    } finally {
-      setAtualizandoStatus(false);
-    }
-  };
-
-  // Adicionar Material de Apoio com sincronização real no Firestore
+  // Adicionar Material de Apoio com upload real e sincronização no Firestore
   const handleAdicionarMaterial = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!novoMaterialNome.trim()) return;
+    if (!novoMaterialArquivo) {
+      setErroStatus("Selecione um arquivo para anexar como material.");
+      return;
+    }
 
     setErroStatus(null);
-    setAtualizandoStatus(true);
+    setEnviandoMaterial(true);
     try {
-      const res = await fetch(`/api/tcc/${encodeURIComponent(tccId)}/marcos/${encodeURIComponent(marcoId)}/sala`, {
+      const formData = new FormData();
+      formData.set("arquivo", novoMaterialArquivo);
+      if (novoMaterialNome.trim()) {
+        formData.set("nome", novoMaterialNome.trim());
+      }
+
+      const res = await fetch(`/api/tcc/${encodeURIComponent(tccId)}/marcos/${encodeURIComponent(marcoId)}/sala/material`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tipo: "NOVO_MATERIAL",
-          material: {
-            nome: novoMaterialNome.trim(),
-            tipo: novoMaterialTipo.toUpperCase(),
-            tamanho: novoMaterialTamanho,
-            url: "#",
-          },
-        }),
+        body: formData,
       });
+
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.message || "Erro ao adicionar material.");
@@ -227,6 +172,7 @@ export function SalaEtapaView({
       const data = await res.json();
       setMateriais([data.material, ...materiais]);
       setNovoMaterialNome("");
+      setNovoMaterialArquivo(null);
       setMostrarFormMaterial(false);
       setSalvoSucesso(true);
       router.refresh();
@@ -234,7 +180,7 @@ export function SalaEtapaView({
     } catch (err) {
       setErroStatus(err instanceof Error ? err.message : "Erro ao anexar material.");
     } finally {
-      setAtualizandoStatus(false);
+      setEnviandoMaterial(false);
     }
   };
 
@@ -319,23 +265,87 @@ export function SalaEtapaView({
     }
   };
 
-  // Parecer do orientador -> coloca em "Em correção" (com chamada real à API de status)
-  const handleEmitirParecer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!parecerOrientador.trim() || historico.length === 0) return;
+  // Ação de concluir a etapa pelo parecer
+  const handleConcluirComParecer = async () => {
+    if (!parecerOrientador.trim()) {
+      setErroStatus("Por favor, preencha o parecer antes de marcar como concluído.");
+      return;
+    }
 
     setErroStatus(null);
-    const id = etapaInicial.entregaId ?? `${tccId}__${marcoId}`;
     setAtualizandoStatus(true);
     try {
-      await alterarStatusEntrega(id, "SOLICITAR_CORRECAO", parecerOrientador.trim());
-      const novaLista = [...historico];
-      novaLista[0] = {
-        ...novaLista[0],
-        notaOuParecer: parecerOrientador.trim(),
-        status: "Em correção",
-      };
-      setHistorico(novaLista);
+      const res = await fetch(`/api/tcc/${encodeURIComponent(tccId)}/marcos/${encodeURIComponent(marcoId)}/sala`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "MARCAR_STATUS",
+          novoStatus: "CONCLUIDA",
+          parecer: parecerOrientador.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Não foi possível concluir a etapa.");
+      }
+
+      const textoParecer = parecerOrientador.trim();
+      if (historico.length > 0) {
+        const novaLista = [...historico];
+        novaLista[0] = {
+          ...novaLista[0],
+          notaOuParecer: textoParecer,
+          status: "Concluído",
+        };
+        setHistorico(novaLista);
+      }
+      setStatusKanban("Concluído");
+      setParecerOrientador("");
+      setParecerSucesso(true);
+      router.refresh();
+      setTimeout(() => setParecerSucesso(false), 4000);
+    } catch (e) {
+      setErroStatus(e instanceof Error ? e.message : "Não foi possível concluir a etapa.");
+    } finally {
+      setAtualizandoStatus(false);
+    }
+  };
+
+  // Ação de voltar para correção pelo parecer
+  const handleVoltarParaCorrecaoComParecer = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!parecerOrientador.trim()) {
+      setErroStatus("Por favor, preencha o parecer indicando as correções necessárias.");
+      return;
+    }
+
+    setErroStatus(null);
+    setAtualizandoStatus(true);
+    try {
+      const res = await fetch(`/api/tcc/${encodeURIComponent(tccId)}/marcos/${encodeURIComponent(marcoId)}/sala`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "MARCAR_STATUS",
+          novoStatus: "EM_REVISAO",
+          parecer: parecerOrientador.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Não foi possível enviar para correção.");
+      }
+
+      const textoParecer = parecerOrientador.trim();
+      if (historico.length > 0) {
+        const novaLista = [...historico];
+        novaLista[0] = {
+          ...novaLista[0],
+          notaOuParecer: textoParecer,
+          status: "Em correção",
+        };
+        setHistorico(novaLista);
+      }
       setStatusKanban("Em correção");
       setParecerOrientador("");
       setParecerSucesso(true);
@@ -358,44 +368,6 @@ export function SalaEtapaView({
         >
           <ArrowLeft className="w-4 h-4" /> {voltarLabel ?? "Voltar"}
         </Link>
-
-        {/* Controles rápidos de status da etapa para o Orientador */}
-        {isOrientador && !editandoEtapa && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={atualizandoStatus}
-              onClick={handleMarcarEmCorrecao}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-700 text-xs font-semibold cursor-pointer transition-colors"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>{atualizandoStatus ? "Atualizando..." : 'Marcar "Em Correção"'}</span>
-            </button>
-            <button
-              type="button"
-              disabled={atualizandoStatus}
-              onClick={handleMarcarConcluido}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 text-emerald-700 text-xs font-semibold cursor-pointer transition-colors"
-            >
-              <Check className="w-3.5 h-3.5" />
-              <span>{atualizandoStatus ? "Atualizando..." : 'Marcar "Concluído"'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setTempTitulo(tituloEtapa);
-                setTempInstrucoes(descricaoInstrucoes);
-                setTempDataEntrega(dataEntrega);
-                setTempStatus(statusKanban);
-                setEditandoEtapa(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dfe2e8] bg-white hover:bg-[#f4f5f7] text-[#111a2e] text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
-            >
-              <Edit3 className="w-3.5 h-3.5 text-[#1e78f0]" />
-              <span>Editar Configurações</span>
-            </button>
-          </div>
-        )}
       </div>
 
       {salvoSucesso && (
@@ -530,6 +502,23 @@ export function SalaEtapaView({
               Prazo limite da sala: <b className="text-[#111a2e]">{dataEntrega}</b>
             </p>
           </div>
+
+          {isOrientador && !editandoEtapa && (
+            <button
+              type="button"
+              onClick={() => {
+                setTempTitulo(tituloEtapa);
+                setTempInstrucoes(descricaoInstrucoes);
+                setTempDataEntrega(dataEntrega);
+                setTempStatus(statusKanban);
+                setEditandoEtapa(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dfe2e8] bg-white hover:bg-[#f4f5f7] text-[#111a2e] text-xs font-semibold cursor-pointer shadow-2xs transition-colors shrink-0"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-[#1e78f0]" />
+              <span>Editar Configurações</span>
+            </button>
+          )}
         </div>
 
         {/* Abas de Navegação Interna da Sala */}
@@ -754,14 +743,20 @@ export function SalaEtapaView({
                                 </span>
                               </div>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => alert(`Baixando anexo: ${anexo.nome}`)}
-                              className="px-2.5 py-1 text-xs font-semibold text-[#1e78f0] bg-white border border-[#dfe2e8] rounded-md hover:bg-blue-50 flex items-center gap-1 shrink-0 cursor-pointer"
-                            >
-                              <Download className="w-3 h-3" />
-                              <span>Baixar</span>
-                            </button>
+                            {anexo.url && anexo.url !== "#" ? (
+                              <a
+                                href={anexo.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download
+                                className="px-2.5 py-1 text-xs font-semibold text-[#1e78f0] bg-white border border-[#dfe2e8] rounded-md hover:bg-blue-50 flex items-center gap-1 shrink-0 cursor-pointer"
+                              >
+                                <Download className="w-3 h-3" />
+                                <span>Baixar</span>
+                              </a>
+                            ) : (
+                              <span className="text-[10.5px] text-[#6b7385] italic">Sem anexo</span>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -810,59 +805,68 @@ export function SalaEtapaView({
                 </b>
                 <button
                   type="button"
-                  onClick={() => setMostrarFormMaterial(false)}
+                  onClick={() => {
+                    setMostrarFormMaterial(false);
+                    setNovoMaterialArquivo(null);
+                    setNovoMaterialNome("");
+                  }}
                   className="text-[#6b7385] hover:text-[#111a2e] cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2">
+              <div className="space-y-3">
+                <div>
                   <label className="block text-xs font-semibold text-[#111a2e] mb-1">
-                    Nome do Arquivo / Material
+                    Arquivo do Material (PDF, DOCX, ZIP, XLSX, etc.)
+                  </label>
+                  <input
+                    type="file"
+                    required
+                    onChange={(e) => {
+                      const arq = e.target.files?.[0] ?? null;
+                      setNovoMaterialArquivo(arq);
+                      if (arq && !novoMaterialNome) {
+                        setNovoMaterialNome(arq.name);
+                      }
+                    }}
+                    className="w-full text-xs text-[#111a2e] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#1e78f0] file:text-white hover:file:bg-[#1666d3] cursor-pointer"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#111a2e] mb-1">
+                    Nome de Exibição (opcional)
                   </label>
                   <input
                     type="text"
                     value={novoMaterialNome}
                     onChange={(e) => setNovoMaterialNome(e.target.value)}
                     placeholder="Ex: Template_Metodologia_2026.docx"
-                    required
                     className="w-full px-3 py-2 text-xs bg-white border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-[#111a2e] mb-1">
-                    Tipo do Arquivo
-                  </label>
-                  <select
-                    value={novoMaterialTipo}
-                    onChange={(e) => setNovoMaterialTipo(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
-                  >
-                    <option value="PDF">PDF</option>
-                    <option value="DOCX">DOCX</option>
-                    <option value="XLSX">XLSX</option>
-                    <option value="ZIP">ZIP</option>
-                    <option value="LINK">LINK</option>
-                  </select>
                 </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() => setMostrarFormMaterial(false)}
+                  onClick={() => {
+                    setMostrarFormMaterial(false);
+                    setNovoMaterialArquivo(null);
+                    setNovoMaterialNome("");
+                  }}
                   className="px-3.5 py-1.5 rounded-lg border border-[#dfe2e8] bg-white text-xs font-semibold text-[#6b7385] hover:bg-[#f4f5f7] cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
+                  disabled={enviandoMaterial || !novoMaterialArquivo}
+                  className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
                 >
-                  Confirmar e Anexar
+                  {enviandoMaterial ? "Enviando arquivo..." : "Confirmar e Anexar"}
                 </button>
               </div>
             </form>
@@ -894,14 +898,20 @@ export function SalaEtapaView({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => alert(`Baixando material: ${mat.nome}`)}
-                      className="px-3 py-1.5 text-xs font-semibold text-[#1e78f0] bg-white border border-[#dfe2e8] hover:bg-blue-50 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Baixar</span>
-                    </button>
+                    {mat.url && mat.url !== "#" ? (
+                      <a
+                        href={mat.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download
+                        className="px-3 py-1.5 text-xs font-semibold text-[#1e78f0] bg-white border border-[#dfe2e8] hover:bg-blue-50 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Baixar</span>
+                      </a>
+                    ) : (
+                      <span className="text-[11px] text-[#6b7385] italic px-2 py-1">Anexo indisponível</span>
+                    )}
 
                     {isOrientador && (
                       <button
@@ -1006,41 +1016,54 @@ export function SalaEtapaView({
             </p>
           </div>
 
-          {/* Área do Orientador: emitir parecer no arquivo mais recente */}
-          {isOrientador && historico.length > 0 && (
+          {/* Área do Orientador: emitir parecer / marcar como concluído ou voltar para correção */}
+          {isOrientador && (
             <div className="p-4 rounded-xl bg-[#f4f5f7] border border-[#dfe2e8] space-y-3">
               <div className="flex items-center justify-between">
                 <b className="text-xs font-bold text-[#111a2e]">
-                  Emitir Parecer / Solicitar Correção para a Versão Mais Recente
+                  Avaliação e Parecer do Orientador
                 </b>
-                <span className="text-[11px] text-[#6b7385]">
-                  Arquivo: <b>{historico[0].arquivoNome}</b>
-                </span>
+                {historico.length > 0 && (
+                  <span className="text-[11px] text-[#6b7385]">
+                    Versão mais recente: <b>{historico[0].arquivoNome}</b>
+                  </span>
+                )}
               </div>
 
               {parecerSucesso && (
                 <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md text-xs font-medium flex items-center gap-1.5">
                   <Check className="w-4 h-4 text-emerald-600" />
-                  <span>Parecer registrado com sucesso! Etapa movida para &quot;Em correção&quot;.</span>
+                  <span>Parecer registrado com sucesso! (Status atual: {statusKanban})</span>
                 </div>
               )}
 
-              <form onSubmit={handleEmitirParecer} className="space-y-2.5">
+              <form onSubmit={handleVoltarParaCorrecaoComParecer} className="space-y-2.5">
                 <textarea
                   value={parecerOrientador}
                   onChange={(e) => setParecerOrientador(e.target.value)}
-                  placeholder="Descreva as correções necessárias ou pontos a melhorar neste envio..."
-                  rows={2}
+                  placeholder="Escreva aqui o parecer orientador com as diretrizes ou motivos da aprovação/correção (obrigatório)..."
+                  rows={3}
                   required
                   className="w-full px-3 py-2 text-xs bg-white border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
                 />
-                <div className="flex justify-end gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
                   <button
                     type="submit"
-                    disabled={atualizandoStatus}
-                    className="px-4 py-1.5 bg-[#1e78f0] hover:bg-[#1666d3] disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-xs"
+                    disabled={atualizandoStatus || !parecerOrientador.trim()}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-700 text-xs font-bold cursor-pointer transition-colors"
                   >
-                    {atualizandoStatus ? "Registrando..." : "Registrar Parecer (Mover para Em Correção)"}
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>{atualizandoStatus ? "Processando..." : "Voltar para Correção"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={atualizandoStatus || !parecerOrientador.trim()}
+                    onClick={handleConcluirComParecer}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold cursor-pointer transition-colors shadow-xs"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>{atualizandoStatus ? "Processando..." : "Marcar como Concluído"}</span>
                   </button>
                 </div>
               </form>
@@ -1071,7 +1094,6 @@ export function SalaEtapaView({
                           className="px-2.5 py-1 text-xs font-semibold text-[#1e78f0] bg-white border border-[#dfe2e8] hover:bg-blue-50 rounded-md">Baixar Arquivo</a>
                       </>
                     )}
-                    <StatusPill status={envio.status} />
                   </div>
                 </div>
               ))}

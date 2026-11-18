@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { requireSessao } from "@/lib/auth/server-session";
-import { getPainelTcc, listarTccsVisiveis } from "@/lib/data/queries";
+import { getPainelTcc, listarTccsVisiveis, serializar } from "@/lib/data/queries";
 import { montarSalaReal } from "@/lib/entregas/sala-real";
 import { PerfilEnum } from "@/types";
 import { SalaEtapaView } from "@/components/etapa/sala-etapa-view";
@@ -44,7 +44,7 @@ async function ConteudoEtapa({ params, searchParams }: Props) {
   if (adminDb) {
     const salaDoc = await adminDb.collection("etapas_sala").doc(`${tccId}__${item.marco.id}`).get();
     if (salaDoc.exists) {
-      dadosSala = salaDoc.data();
+      dadosSala = serializar<Record<string, unknown>>(salaDoc.data());
     }
   }
 
