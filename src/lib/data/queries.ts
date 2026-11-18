@@ -34,10 +34,30 @@ function db(): Firestore {
 
 /** Timestamp → string ISO (recursivo), para poder cruzar Server → Client Component. */
 export function serializar<T>(valor: unknown): T {
-  if (valor instanceof Timestamp) return valor.toDate().toISOString() as T;
+  if (!valor) return valor as T;
+  // Firestore Timestamp tem métodos toDate ou propriedades _seconds
+  if (
+    valor instanceof Timestamp ||
+    (typeof valor === "object" && valor !== null && ("_seconds" in valor || typeof (valor as { toDate?: unknown }).toDate === "function"))
+  ) {
+    if (typeof (valor as { toDate?: () => Date }).toDate === "function") {
+      try {
+        return (valor as { toDate: () => Date }).toDate().toISOString() as T;
+      } catch {
+        // fallback
+      }
+    }
+    const sec = (valor as { _seconds: number })._seconds;
+    if (typeof sec === "number") {
+      return new Date(sec * 1000).toISOString() as T;
+    }
+  }
+  if (valor instanceof Date) return valor.toISOString() as T;
   if (Array.isArray(valor)) return valor.map((v) => serializar(v)) as T;
-  if (valor && typeof valor === "object") {
-    return Object.fromEntries(Object.entries(valor).map(([k, v]) => [k, serializar(v)])) as T;
+  if (typeof valor === "object") {
+    // Evita erro se o objeto tiver protótipo null ou getters
+    const entries = Object.entries(valor).map(([k, v]) => [k, serializar(v)]);
+    return Object.fromEntries(entries) as T;
   }
   return valor as T;
 }

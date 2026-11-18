@@ -86,13 +86,14 @@ export async function POST(
     }
 
     const body = await request.json().catch(() => ({}));
-    const { tipo, postagem, material, materialIdParaRemover, config, novoStatus } = body as {
+    const { tipo, postagem, material, materialIdParaRemover, config, novoStatus, parecer } = body as {
       tipo: "NOVA_POSTAGEM" | "NOVO_MATERIAL" | "REMOVER_MATERIAL" | "EDITAR_CONFIG" | "MARCAR_STATUS";
       postagem?: { titulo: string; conteudo: string };
-      material?: { nome: string; url: string; tipo?: string; tamanho?: string };
+      material?: { nome: string; url?: string; tipo?: string; tamanho?: string };
       materialIdParaRemover?: string;
       config?: { titulo?: string; instrucoes?: string; dataEntrega?: string };
       novoStatus?: "EM_REVISAO" | "CONCLUIDA" | "SOLICITADA_CORRECAO";
+      parecer?: string;
     };
 
     const salaDocId = `${tccId}__${marcoId}`;
@@ -113,7 +114,7 @@ export async function POST(
         autorNome: sessao.nome ?? "Professor(a) Orientador(a)",
         autorPapel: "Professor(a) Orientador(a)",
         dataHora: agoraIso,
-        criadoEm: agora,
+        criadoEm: agoraIso,
         titulo: postagem.titulo.trim(),
         conteudo: postagem.conteudo.trim(),
       };
@@ -134,8 +135,8 @@ export async function POST(
         nome: material.nome.trim(),
         tipo: material.tipo?.toUpperCase() ?? "DOCUMENTO",
         tamanho: material.tamanho ?? "Arquivo",
-        url: material.url || "#",
-        criadoEm: agora,
+        url: material.url?.trim() || "#",
+        criadoEm: agoraIso,
       };
 
       const materiaisAtualizados = [novoMaterialObj, ...(dadosAtuais?.materiais ?? [])];
@@ -180,18 +181,26 @@ export async function POST(
         return NextResponse.json({ error: "INVALID_REQUEST", message: "Status não informado." }, { status: 400 });
       }
 
-      // 1. Atualiza na tabela entregas (garantindo que o registro exista para este tcc e marco)
-      const entregaId = `${tccId}__${marcoId}`;
-      const entregaRef = adminDb.collection("entregas").doc(entregaId);
-      const entregaDoc = await entregaRef.get();
+      // 1. Localiza ou cria a entrega no Firestore (busca por tcc_id e marco_id para cobrir tanto IDs customizados quanto seed)
+      const snapEntregas = await adminDb
+        .collection("entregas")
+        .where("tcc_id", "==", tccId)
+        .where("marco_id", "==", marcoId)
+        .limit(1)
+        .get();
 
-      if (entregaDoc.exists) {
-        await entregaRef.update({
+      let entregaDocRef: FirebaseFirestore.DocumentReference;
+
+      if (!snapEntregas.empty) {
+        entregaDocRef = snapEntregas.docs[0].ref;
+        await entregaDocRef.update({
           status: novoStatus,
           dataAtualizacao: agora,
         });
       } else {
-        await entregaRef.set({
+        const entregaId = `${tccId}__${marcoId}`;
+        entregaDocRef = adminDb.collection("entregas").doc(entregaId);
+        await entregaDocRef.set({
           id: entregaId,
           tcc_id: tccId,
           marco_id: marcoId,
@@ -201,8 +210,23 @@ export async function POST(
         });
       }
 
-      // 2. Salva também no status da sala
-      await salaRef.set({ statusCustomizado: novoStatus }, { merge: true });
+      // 2. Se houver parecer, salva na collection feedbacks e na sala
+      const parecerTexto = parecer?.trim();
+      if (parecerTexto) {
+        await adminDb.collection("feedbacks").add({
+          entrega_id: entregaDocRef.id,
+          autor_id: sessao.usuario?.id ?? sessao.uid,
+          comentario: parecerTexto,
+          data: agora,
+        });
+      }
+
+      // 3. Salva também no status da sala
+      const salaUpdates: Record<string, unknown> = { statusCustomizado: novoStatus };
+      if (parecerTexto) {
+        salaUpdates.parecerMaisRecente = parecerTexto;
+      }
+      await salaRef.set(salaUpdates, { merge: true });
 
       return NextResponse.json({ success: true, novoStatus });
     }

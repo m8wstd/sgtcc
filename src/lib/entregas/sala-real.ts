@@ -46,7 +46,7 @@ export function montarSalaReal(
       arquivoNome: nomeExibicaoDoArquivo(v.arquivoUrl),
       data: new Date(String(v.dataUpload)).toLocaleString("pt-BR"),
       status: statusKanban,
-      notaOuParecer: idx === 0 ? item.feedbacks[0]?.comentario : undefined,
+      notaOuParecer: (dadosSalaFirestore as any)?.parecerMaisRecente ?? (idx === 0 && item.feedbacks[0]?.comentario ? item.feedbacks[0].comentario : undefined),
     })),
   };
 }
