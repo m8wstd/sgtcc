@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Send, Users, User, MessageSquare } from "lucide-react";
+import { Send, Users, User, MessageSquare, ArrowLeft } from "lucide-react";
 import type { ConversaItem, MensagemChat } from "@/app/api/mensagens/route";
 
 interface MensagensClientProps {
@@ -34,7 +34,8 @@ export function MensagensClient({
         const data = await res.json();
         if (Array.isArray(data.conversas)) {
           setConversas(data.conversas);
-          if (!conversaAtivaId && data.conversas.length > 0) {
+          // No desktop seleciona automaticamente a primeira conversa se não houver selecionada e não for mobile
+          if (!conversaAtivaId && data.conversas.length > 0 && typeof window !== "undefined" && window.innerWidth >= 768) {
             setConversaAtivaId(data.conversas[0].id);
           }
         }
@@ -145,13 +146,20 @@ export function MensagensClient({
         </p>
       </div>
 
-      {/* Caixa do Chat (Layout inspirado diretamente em docs/prototipo.html com as classes .wa, .wl, .wr, .wh, .wmsgs, .wm, .wi) */}
-      <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] h-[calc(100vh-230px)] min-h-[520px] border border-[#dfe2e8] rounded-2xl overflow-hidden bg-white shadow-xs">
+      {/* Caixa do Chat (Layout estilo WhatsApp: no mobile mostra lista OU conversa aberta; no desktop mostra ambos lado a lado) */}
+      <div className="flex md:grid md:grid-cols-[320px_1fr] h-[calc(100vh-210px)] min-h-[500px] border border-[#dfe2e8] rounded-2xl overflow-hidden bg-white shadow-xs">
         {/* Lista Lateral de Contatos / Grupos (.wl) */}
-        <div className="border-r border-[#dfe2e8] overflow-y-auto bg-white flex flex-col">
-          <div className="p-3 border-b border-[#dfe2e8] bg-[#f4f5f7]/60">
+        <div
+          className={`border-r border-[#dfe2e8] overflow-y-auto bg-white flex flex-col w-full md:w-auto h-full ${
+            conversaAtivaId ? "hidden md:flex" : "flex"
+          }`}
+        >
+          <div className="p-3.5 border-b border-[#dfe2e8] bg-[#f4f5f7]/60 flex items-center justify-between">
             <span className="text-xs font-bold text-[#111a2e] uppercase tracking-wider">
               Conversas & Grupos
+            </span>
+            <span className="text-[11px] text-[#6b7385] font-medium">
+              {conversas.length} {conversas.length === 1 ? "conversa" : "conversas"}
             </span>
           </div>
 
@@ -174,15 +182,15 @@ export function MensagensClient({
                     key={c.id}
                     type="button"
                     onClick={() => setConversaAtivaId(c.id)}
-                    className={`w-full text-left p-3 flex items-center gap-3 transition-colors cursor-pointer border-l-4 ${
+                    className={`w-full text-left p-3.5 flex items-center gap-3 transition-colors cursor-pointer border-l-4 ${
                       ativo
                         ? "bg-[#f4f5f7] border-l-[#1e78f0]"
-                        : "border-l-transparent hover:bg-[#f8f9fa]"
+                        : "border-l-transparent hover:bg-[#f8f9fa] active:bg-[#f4f5f7]"
                     }`}
                   >
                     {/* Avatar (.wav) */}
                     <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                      className={`w-11 h-11 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                         c.tipo === "GRUPO"
                           ? "bg-[#1e78f0] text-white"
                           : "bg-[#0f1b33] text-white"
@@ -192,17 +200,17 @@ export function MensagensClient({
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-1">
-                        <b className="text-xs font-bold text-[#111a2e] truncate">
+                      <div className="flex items-center justify-between gap-1 mb-0.5">
+                        <b className="text-xs sm:text-sm font-bold text-[#111a2e] truncate">
                           {c.titulo}
                         </b>
                         {c.ultimaMensagem && (
-                          <i className="not-italic text-[10px] text-[#6b7385] whitespace-nowrap">
+                          <i className="not-italic text-[10px] sm:text-[11px] text-[#6b7385] whitespace-nowrap">
                             {c.ultimaMensagem.hora}
                           </i>
                         )}
                       </div>
-                      <span className="block text-[11px] text-[#6b7385] truncate">
+                      <span className="block text-xs text-[#6b7385] truncate">
                         {c.ultimaMensagem
                           ? `${c.ultimaMensagem.texto}`
                           : c.subtitulo || "Sem mensagens"}
@@ -216,27 +224,41 @@ export function MensagensClient({
         </div>
 
         {/* Área Principal de Conversa (.wr) */}
-        <div className="flex flex-col min-w-0 bg-[#f4f5f7]">
+        <div
+          className={`flex flex-col min-w-0 bg-[#f4f5f7] w-full h-full ${
+            !conversaAtivaId ? "hidden md:flex" : "flex"
+          }`}
+        >
           {conversaAtiva ? (
             <>
-              {/* Topbar da Conversa (.wh) */}
-              <div className="flex items-center gap-3 p-3 px-4 bg-white border-b border-[#dfe2e8] shadow-2xs">
+              {/* Topbar da Conversa estilo WhatsApp (.wh) com botão Voltar no Mobile */}
+              <div className="flex items-center gap-2 sm:gap-3 p-3 px-3 sm:px-4 bg-white border-b border-[#dfe2e8] shadow-2xs shrink-0">
+                {/* Botão de Voltar para a lista no Mobile */}
+                <button
+                  type="button"
+                  onClick={() => setConversaAtivaId(null)}
+                  className="md:hidden p-1.5 -ml-1 text-[#111a2e] hover:bg-[#f4f5f7] rounded-full cursor-pointer transition-colors"
+                  aria-label="Voltar para a lista de conversas"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+
                 <div
-                  className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs text-white shrink-0 ${
+                  className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-xs text-white shrink-0 ${
                     conversaAtiva.tipo === "GRUPO" ? "bg-[#1e78f0]" : "bg-[#0f1b33]"
                   }`}
                 >
                   {conversaAtiva.tipo === "GRUPO" ? (
-                    <Users className="w-4 h-4" />
+                    <Users className="w-4 h-4 sm:w-5 sm:h-5" />
                   ) : (
                     conversaAtiva.titulo.charAt(0).toUpperCase()
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <b className="text-xs font-bold text-[#111a2e] block truncate">
+                  <b className="text-xs sm:text-sm font-bold text-[#111a2e] block truncate">
                     {conversaAtiva.titulo}
                   </b>
-                  <small className="text-[11px] text-[#6b7385] block truncate">
+                  <small className="text-[10px] sm:text-[11px] text-[#6b7385] block truncate">
                     {conversaAtiva.subtitulo || (conversaAtiva.tipo === "GRUPO" ? "Grupo do TCC" : "Mensagem Privada")}
                   </small>
                 </div>
