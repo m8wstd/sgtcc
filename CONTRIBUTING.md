@@ -1,6 +1,6 @@
 # Guia de Contribuição — SGTCC
 
-Bem-vindo ao repositório do **SGTCC (Sistema de Gestão de TCC)**! Este guia define as diretrizes, fluxos de trabalho e padrões arquiteturais para contribuir com o desenvolvimento do **Frontend** e do **Backend** da plataforma.
+Bem-vindo ao repositório do **SGTCC (Sistema de Gestão de TCC)**! Este guia define as diretrizes, fluxos de trabalho, boas práticas e padrões arquiteturais para contribuir com o desenvolvimento da plataforma.
 
 ---
 
@@ -8,33 +8,38 @@ Bem-vindo ao repositório do **SGTCC (Sistema de Gestão de TCC)**! Este guia de
 1. [Fluxo de Branches e Git](#-fluxo-de-branches-e-git)
 2. [Configuração do Ambiente de Desenvolvimento](#-configuração-do-ambiente-de-desenvolvimento)
 3. [Diretrizes de Desenvolvimento: Frontend](#-diretrizes-de-desenvolvimento-frontend)
-4. [Diretrizes de Desenvolvimento: Backend](#-diretrizes-de-desenvolvimento-backend)
+4. [Diretrizes de Desenvolvimento: Backend e APIs](#-diretrizes-de-desenvolvimento-backend-e-apis)
 5. [Padrões de Nomenclatura e Commits](#-padrões-de-nomenclatura-e-commits)
-6. [Passo a Passo Prático para Contribuir](#-passo-a-passo-prático-para-contribuir)
-7. [Checklist antes de Abrir o Pull Request (PR)](#-checklist-antes-de-abrir-o-pull-request-pr)
+6. [Testes e Qualidade de Código](#-testes-e-qualidade-de-código)
+7. [Passo a Passo Prático para Contribuir](#-passo-a-passo-prático-para-contribuir)
+8. [Checklist antes de Abrir o Pull Request (PR)](#-checklist-antes-de-abrir-o-pull-request-pr)
 
 ---
 
 ## 🌿 Fluxo de Branches e Git
 
-Adotamos um modelo simplificado baseado em GitFlow:
+Adotamos um modelo de branches baseado em GitFlow:
 
-- **`main`**: **Branch de Produção / Entregas Oficiais**. Contém estritamente o código validado e finalizado para as datas das Sprints avaliadas pela disciplina. **Nunca faça commits diretos na `main`**.
-- **`dev`**: **Branch de Integração Contínua**. É a branch principal de trabalho da equipe. Todo novo código entra aqui primeiro.
-- **Branches de Feature/Fix**: Devem ser criadas sempre a partir da `dev` e reintegradas via Pull Request (PR).
-  - Padrão: `feat/<nome-da-tarefa>` ou `fix/<nome-da-correcao>` (ex: `feat/rf01-login`, `feat/db-tcc-schema`, `fix/responsividade-tabela`).
+- **`main`**: **Branch de Produção / Entregas Oficiais**. Contém estritamente o código validado e estável. **Nunca faça commits diretos na `main`**.
+- **`dev`**: **Branch de Integração Contínua**. É a branch principal de trabalho da equipe. Todo novo código entra aqui primeiro via Pull Request.
+- **Branches de Feature/Fix**: Devem ser criadas sempre a partir da `dev`:
+  - Features: `feat/<nome-da-tarefa>` (ex: `feat/painel-coordenacao`, `feat/chat-mobile`)
+  - Correções de Bugs: `fix/<nome-da-correcao>` (ex: `fix/status-kanban`, `fix/mobile-aluno-overflow`)
+  - Refatorações: `refactor/<nome-do-modulo>`
 
 ---
 
 ## 💻 Configuração do Ambiente de Desenvolvimento
 
 ### Pré-requisitos
-- **Node.js**: Versão 20.x ou superior (testado e validado em Node 25).
-- **npm**: Gerenciador de pacotes padrão do Node.
+- **Node.js**: Versão 20.x ou superior.
+- **npm** (ou gerenciador compatível).
 - **Git**: Controle de versão.
+- Projeto configurado no **Firebase Console** (Auth + Firestore).
+- Token de acesso ao **Vercel Blob Storage** (para upload e visualização de PDFs/documentos).
 
 ### Clonar e Instalar Dependências
-```powershell
+```bash
 # 1. Clone o repositório
 git clone https://github.com/m8wstd/sgtcc.git
 
@@ -49,16 +54,37 @@ npm install
 ```
 
 ### Configurar Variáveis de Ambiente
-Copie o modelo de variáveis de ambiente para o arquivo local (que é ignorado pelo Git):
-```powershell
-cp .env.example .env.local
+Crie ou edite o arquivo `.env.local` na raiz do projeto (este arquivo é ignorado pelo Git):
+```env
+# Firebase Admin (Credenciais de Servidor)
+FIREBASE_PROJECT_ID="seu-projeto-id"
+FIREBASE_CLIENT_EMAIL="firebase-adminsdk@seu-projeto.iam.gserviceaccount.com"
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+
+# Firebase Client (Exposto publicamente no browser)
+NEXT_PUBLIC_FIREBASE_API_KEY="AIzaSy..."
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="seu-projeto.firebaseapp.com"
+NEXT_PUBLIC_FIREBASE_PROJECT_ID="seu-projeto-id"
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="seu-projeto.appspot.com"
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="..."
+NEXT_PUBLIC_FIREBASE_APP_ID="..."
+
+# Vercel Blob Storage (Armazenamento de Arquivos)
+BLOB_READ_WRITE_TOKEN="vercel_blob_rw_..."
+
+# Sessão e Seed
+SESSION_SECRET="uma-chave-secreta-longa-para-cookies-de-sessao"
+SEED_PASSWORD="SenhaPadraoSeed123!"
 ```
-Edite `.env.local` preenchendo as chaves do Firebase obtidas no Console do projeto:
-- `NEXT_PUBLIC_FIREBASE_*`: Utilizadas no navegador (Frontend).
-- `FIREBASE_*`: Utilizadas exclusivamente no servidor (Backend / Admin).
+
+### Popular o Banco de Dados com Dados de Demonstração (Seed)
+O script de seed cria todas as coleções, usuários de teste de todas as personas (Aluno, Professor/Orientador/Avaliador, Coordenação, Admin) e gera PDFs de exemplo:
+```bash
+npm run seed
+```
 
 ### Rodar o Servidor Local
-```powershell
+```bash
 npm run dev
 ```
 O projeto estará disponível em `http://localhost:3000`.
@@ -67,128 +93,156 @@ O projeto estará disponível em `http://localhost:3000`.
 
 ## 🎨 Diretrizes de Desenvolvimento: Frontend
 
-O frontend é construído com **Next.js (App Router)**, **React 19**, **Tailwind CSS v4** e **shadcn/ui**.
+O frontend é construído com **Next.js 16 (App Router)**, **React 19**, **Tailwind CSS v4** e **Base UI / shadcn/ui**.
 
 ### 1. Estrutura de Diretórios
-```
+```plaintext
 src/
 ├── app/                  # Rotas e páginas do Next.js (App Router)
-│   ├── layout.tsx        # Layout raiz da aplicação
-│   ├── globals.css       # Tokens de tema e CSS Tailwind v4
-│   ├── page.tsx          # Página inicial
-│   ├── (auth)/           # Grupo de rotas públicas de autenticação (login, cadastro)
-│   └── (dashboard)/      # Grupo de rotas autenticadas (aluno, orientador, coordenador)
+│   ├── api/              # Route Handlers protegidos (endpoints HTTP)
+│   ├── cadastro/         # Cadastro via token de convite
+│   ├── dashboard/        # Telas autenticadas agrupadas por persona
+│   │   ├── admin/        # Gestão de usuários, convites e métricas
+│   │   ├── aluno/        # Entregas, progresso e submissão final
+│   │   ├── avaliador/    # Painel da banca examinadora (Kanban)
+│   │   ├── coordenacao/  # Operações da coordenação (Novo TCC, alocações, bancas)
+│   │   ├── cronograma/   # Visualização do cronograma de etapas
+│   │   ├── mensagens/    # Chat de mensagens em tempo real
+│   │   ├── orientador/   # Acompanhamento de orientandos (Kanban)
+│   │   ├── professor/    # Dashboard unificado do professor (Orientações + Banca)
+│   │   └── tcc/[id]/     # Detalhe do TCC, etapas, pareceres e sala de banca
+│   ├── login/            # Tela de autenticação com credenciais
+│   └── layout.tsx        # Layout raiz com fontes e tokens globais
 ├── components/           # Componentes reutilizáveis
-│   ├── ui/               # Componentes do design system shadcn/ui (Button, Card, Input...)
-│   └── layout/           # Componentes de navegação, sidebars, cabeçalhos
-├── lib/                  # Utilitários globais e clientes de SDK
-│   ├── utils.ts          # Utilitário de classes CSS (cn)
-│   └── firebase/         # Módulos de inicialização
-└── types/                # Tipos TypeScript do domínio (index.ts)
+│   ├── etapa/            # Componentes de submissão, upload e sala de banca
+│   ├── layout/           # Header, FloatingHub responsivo e modais de topo
+│   ├── tcc-view/         # Linha do tempo e visualização de etapas
+│   └── ui/               # Componentes primitivos (StatCard, StatusPill, etc.)
+├── lib/                  # Utilitários, regras de domínio e clientes de SDK
+└── types/                # Interfaces TypeScript do sistema
 ```
 
-### 2. Padrões de Componentes UI (shadcn/ui)
-- Prefira reutilizar os componentes em `src/components/ui/`.
-- Para adicionar um novo componente oficial do shadcn/ui, execute:
-  ```powershell
-  npx shadcn@latest add <nome-do-componente>
-  # Exemplo:
-  npx shadcn@latest add dialog dropdown-menu table
-  ```
-- Use a biblioteca **`lucide-react`** para ícones.
-- Garanta **responsividade** (RNF02 e US12-AC2):
-  - Em telas menores (`sm:`, `md:`), tabelas devem se transformar em cards empilhados.
-  - Utilize as classes do Tailwind (`hidden md:table`, `md:hidden flex flex-col gap-2`).
+### 2. Boas Práticas de UI e Responsividade
+- **Mobile First e Semântica**:
+  - Toda funcionalidade desenvolvida deve ser 100% responsiva (smartphones, tablets e desktop).
+  - Evite que botões, selects ou tags estourem a largura da tela em dispositivos móveis (`max-w-full`, `min-w-0`, `truncate`).
+  - Em telas menores, adote empilhamento limpo (`flex-col sm:flex-row`, `w-full sm:w-auto`).
+- **Navegação**:
+  - A navegação principal entre módulos e personas é gerenciada exclusivamente pelo **Hub Flutuante Inferior** (`FloatingHub`), estilizado em *Liquid Glass* responsivo.
+  - Não crie menus e botões redundantes no cabeçalho superior que dupliquem abas do hub.
+- **Ícones**:
+  - Utilize estritamente a biblioteca **`lucide-react`**.
+  - Respeite o mapeamento semântico de ícones por persona:
+    - 🎓 **Aluno**: `GraduationCap`
+    - 📖 **Orientador / Orientações**: `BookOpen`
+    - 🏆 **Avaliador / Banca**: `Award`
+    - 🗂️ **Coordenação**: `Layers`
+    - 🛡️ **Administração**: `ShieldCheck`
+- **Acessibilidade e Usabilidade**:
+  - Não utilize dados falsos ou fantasmas (dados estáticos simulados onde deve haver integração real).
+  - Feedbacks do professor e notas de banca devem ser funcionais e persistidos no banco.
 
 ---
 
-## ⚙️ Diretrizes de Desenvolvimento: Backend
+## ⚙️ Diretrizes de Desenvolvimento: Backend e APIs
 
-O backend do SGTCC utiliza o ecossistema **Firebase** integrado ao Next.js (Server Actions e Route Handlers).
+### 1. Modelagem e Tipagem de Dados
+- Toda entidade do domínio deve respeitar as tipagens de [`src/types/index.ts`](file:///home/mw/Projects/sgtcc/src/types/index.ts).
+- Principais coleções no Firestore:
+  - `usuarios`: Informações de conta, e-mail, nome e perfil (`ALUNO`, `ORIENTADOR`, `AVALIADOR`, `COORDENACAO`, `ADMIN`).
+  - `alunos`: Matrícula, curso e referência ao `usuario_id`.
+  - `professores_orientadores` / `professores_avaliadores`: Cursos habilitados e referência ao `usuario_id`.
+  - `coordenadores`: Cursos sob coordenação e referência ao `usuario_id`.
+  - `tccs`: Projeto de TCC vinculado a `aluno_id` (e `alunos_ids` para múltiplos coautores), `orientador_id`, curso, fase (1 ou 2) e semestre.
+  - `bancas_avaliacao`: Vínculo entre TCC e professor avaliador da banca.
+  - `entregas`, `versoes_arquivo` e `feedbacks`: Histórico imutável de submissões e pareceres das etapas.
+  - `notificacoes`: Alertas em tempo real enviados a usuários ou em lote.
 
-### 1. Modelagem e Tipagem
-- **Todas as entidades e coleções** devem seguir a tipagem definida em [`src/types/index.ts`](file:///c:/Users/maxwe/Desktop/sgtcc/src/types/index.ts), que espelha os diagramas UML (`docs/classes.puml` e `docs/data.puml`):
-  - `usuarios`
-  - `alunos`
-  - `professores_orientadores`
-  - `professores_avaliadores`
-  - `coordenadores`
-  - `tccs`
-  - `cronogramas`
-  - `marcos_cronograma`
-  - `entregas`
-  - `versoes_arquivo`
-  - `feedbacks`
-  - `bancas_avaliacao`
-  - `notificacoes`
+### 2. Autenticação e Sessão
+- **Sessão Segura**: Baseada em cookies HTTP-Only assinados e Custom Claims do Firebase Auth (`requireSessao`).
+- **Controle de Acesso (RBAC)**:
+  - Todo Route Handler (`src/app/api/...`) ou Server Component que manipula dados restritos deve validar o perfil da sessão antes de qualquer operação.
+  - **Coordenação**: Só pode visualizar, criar TCCs e alocar bancas para os cursos que coordena.
+  - **Professores**: Podem atuar tanto como Orientadores quanto como Avaliadores de Banca, navegando entre as abas correspondentes.
+  - **Proteção Open Redirect**: Use sempre `destinoSeguro(next)` em fluxos de redirecionamento para aceitar apenas rotas internas do dashboard.
 
-### 2. Uso dos SDKs do Firebase
-- **Client-Side** (`src/lib/firebase/config.ts`):
-  - Utilize para operações de autenticação com o usuário atual (`auth.currentUser`), ouvintes de estado de login (`onAuthStateChanged`) e leituras permitidas por regras de segurança.
-- **Server-Side / Admin** (`src/lib/firebase/admin.ts`):
-  - Utilize em Server Actions (`"use server"`) ou rotas de API (`src/app/api/...`) para operações que exigem privilégios elevados, como criação em lote de usuários, atribuição de perfis com claims personalizadas (Custom Claims), ou validação estrita de prazos.
-
-### 3. Regras de Negócio Críticas
-- **RN02 (Imutabilidade de Histórico)**: Ao trocar de orientador, não delete ou altere registros de entregas e feedbacks anteriores.
-- **RN05 & US13 (Fluxo Obrigatório)**: Um marco só pode ser concluído pelo orientador se tiver pelo menos uma submissão de arquivo do aluno.
-- **US03 (Restrição de Arquivo)**: No upload de entregas, validar estritamente extensões `.pdf` e `.docx`.
+### 3. Upload de Arquivos
+- Uploads de PDFs e materiais de apoio utilizam o **Vercel Blob Storage** (`@vercel/blob`).
+- O backend valida a extensão do arquivo e armazena metadados (URL pública/privada, data, tamanho, número da versão) na coleção correspondente do Firestore.
 
 ---
 
 ## 🏷️ Padrões de Nomenclatura e Commits
 
-Utilizamos o padrão **Conventional Commits**:
-- `feat:` Nova funcionalidade (ex: `feat: tela de login institucional RF01`)
-- `fix:` Correção de bug (ex: `fix: bloqueio de upload fora do prazo`)
-- `docs:` Alterações na documentação (ex: `docs: atualiza instruções de setup`)
+Adotamos a especificação **Conventional Commits**:
+- `feat:` Nova funcionalidade (ex: `feat(coordenacao): criacao de tcc com multiplos alunos`)
+- `fix:` Correção de bug (ex: `fix(banca): alinhamento de filtros e remocao de texto redundante`)
+- `docs:` Alterações em documentações (ex: `docs: atualiza README e CONTRIBUTING`)
+- `refactor:` Refatoração de código sem alteração de comportamento
 - `style:` Ajustes visuais ou de formatação que não alteram a lógica
-- `refactor:` Refatoração de código
-- `test:` Adição ou modificação de testes
+- `test:` Adição ou modificação de testes automatizados
+
+---
+
+## 🧪 Testes e Qualidade de Código
+
+Qualquer nova funcionalidade ou correção deve manter a suíte de testes íntegra e sem erros de tipagem.
+
+```bash
+# Executar a suíte de testes com Vitest
+npm test
+
+# Executar checagem estática de tipos TypeScript
+npx tsc --noEmit
+
+# Executar o linter
+npm run lint
+```
 
 ---
 
 ## 🚀 Passo a Passo Prático para Contribuir
 
-1. **Atualize sua branch local `dev`**:
-   ```powershell
+1. **Sincronize sua branch `dev` local**:
+   ```bash
    git checkout dev
    git pull origin dev
    ```
 
-2. **Crie uma branch específica para sua tarefa**:
-   ```powershell
-   git checkout -b feat/rf01-login-screen
+2. **Crie uma branch para sua tarefa**:
+   ```bash
+   git checkout -b feat/nome-da-sua-feature
    ```
 
-3. **Desenvolva a funcionalidade**:
-   - Mantenha o código limpo, tipado e com separação clara de responsabilidades.
-   - Siga os Acceptance Criteria (AC) da User Story correspondente.
+3. **Desenvolva e teste localmente**:
+   - Garanta a responsividade no mobile e desktop.
+   - Escreva testes unitários/integração para regras de negócio novas.
 
-4. **Verifique se o build e tipagem estão passando**:
-   ```powershell
-   npm run build
+4. **Valide a integridade do projeto**:
+   ```bash
+   npx tsc --noEmit
+   npm test
    ```
-   *Se o build falhar, corrija os erros de TypeScript antes de subir o código.*
 
 5. **Commit e Push**:
-   ```powershell
+   ```bash
    git add .
-   git commit -m "feat(auth): implementa tela de login e integracao com firebase auth"
-   git push -u origin feat/rf01-login-screen
+   git commit -m "feat(modulo): descricao clara da alteracao"
+   git push -u origin feat/nome-da-sua-feature
    ```
 
-6. **Abra um Pull Request no GitHub**:
-   - Direcione o PR para a branch base **`dev`** (e **não** para a `main`).
-   - Descreva o que foi implementado e marque a User Story correspondente.
-   - Peça revisão de ao menos um colega do grupo.
+6. **Abra o Pull Request no GitHub**:
+   - Defina como branch de destino a **`dev`** (e nunca a `main`).
+   - Preencha o template do PR explicando o que foi feito, instruções para teste e capturas de tela se houver mudança de interface.
 
 ---
 
 ## ✅ Checklist antes de Abrir o Pull Request (PR)
 
-- [ ] Estou na branch correta baseada na `dev`?
-- [ ] O comando `npm run build` executou com sucesso (sem erros de TypeScript)?
-- [ ] O `.env.local` **não** foi adicionado ao Git (verifique com `git status`)?
-- [ ] Os componentes criados são responsivos (mobile, tablet e desktop)?
-- [ ] As entidades utilizadas respeitam [`src/types/index.ts`](file:///c:/Users/maxwe/Desktop/sgtcc/src/types/index.ts)?
-- [ ] Os critérios de aceitação (AC) da User Story foram testados manualmente?
+- [ ] A branch foi criada a partir da `dev` e tem um nome descritivo (`feat/`, `fix/`)?
+- [ ] O comando `npx tsc --noEmit` executou com **0 erros** de TypeScript?
+- [ ] O comando `npm test` passou com **100% de sucesso** em todos os testes?
+- [ ] O arquivo `.env.local` está devidamente ignorado e **não** foi adicionado ao commit?
+- [ ] A interface foi testada em resolução mobile (375px a 425px) e desktop?
+- [ ] Não foram incluídos dados falsos/estáticos onde a integração real deve operar?
+- [ ] O PR está apontando para a branch **`dev`**?
