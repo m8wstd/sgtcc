@@ -265,6 +265,34 @@ export function SalaEtapaView({
     }
   };
 
+  // Ação de colocar em correção (sem parecer)
+  const handleIniciarCorrecao = async () => {
+    setErroStatus(null);
+    setAtualizandoStatus(true);
+    try {
+      const res = await fetch(`/api/tcc/${encodeURIComponent(tccId)}/marcos/${encodeURIComponent(marcoId)}/sala`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tipo: "MARCAR_STATUS",
+          novoStatus: "EM_REVISAO",
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Não foi possível colocar em correção.");
+      }
+      setStatusKanban("Em correção");
+      setSalvoSucesso(true);
+      router.refresh();
+      setTimeout(() => setSalvoSucesso(false), 4000);
+    } catch (err) {
+      setErroStatus(err instanceof Error ? err.message : "Erro ao iniciar correção.");
+    } finally {
+      setAtualizandoStatus(false);
+    }
+  };
+
   // Ação de concluir a etapa pelo parecer
   const handleConcluirComParecer = async () => {
     if (!parecerOrientador.trim()) {
@@ -327,7 +355,7 @@ export function SalaEtapaView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tipo: "MARCAR_STATUS",
-          novoStatus: "EM_REVISAO",
+          novoStatus: "SOLICITADA_CORRECAO",
           parecer: parecerOrientador.trim(),
         }),
       });
@@ -342,11 +370,11 @@ export function SalaEtapaView({
         novaLista[0] = {
           ...novaLista[0],
           notaOuParecer: textoParecer,
-          status: "Em correção",
+          status: "Em andamento",
         };
         setHistorico(novaLista);
       }
-      setStatusKanban("Em correção");
+      setStatusKanban("Em andamento");
       setParecerOrientador("");
       setParecerSucesso(true);
       router.refresh();
@@ -1037,36 +1065,52 @@ export function SalaEtapaView({
                 </div>
               )}
 
-              <form onSubmit={handleVoltarParaCorrecaoComParecer} className="space-y-2.5">
-                <textarea
-                  value={parecerOrientador}
-                  onChange={(e) => setParecerOrientador(e.target.value)}
-                  placeholder="Escreva aqui o parecer orientador com as diretrizes ou motivos da aprovação/correção (obrigatório)..."
-                  rows={3}
-                  required
-                  className="w-full px-3 py-2 text-xs bg-white border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
-                />
-                <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-                  <button
-                    type="submit"
-                    disabled={atualizandoStatus || !parecerOrientador.trim()}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-700 text-xs font-bold cursor-pointer transition-colors"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>{atualizandoStatus ? "Processando..." : "Voltar para Correção"}</span>
-                  </button>
-
+              {statusKanban === "Para correção" ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                  <p className="text-xs text-[#6b7385]">
+                    O aluno enviou uma nova versão. Coloque em correção para iniciar a análise e emitir seu parecer.
+                  </p>
                   <button
                     type="button"
-                    disabled={atualizandoStatus || !parecerOrientador.trim()}
-                    onClick={handleConcluirComParecer}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold cursor-pointer transition-colors shadow-xs"
+                    disabled={atualizandoStatus}
+                    onClick={handleIniciarCorrecao}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-[#1e78f0] hover:bg-[#1666d3] disabled:opacity-50 text-white text-xs font-bold cursor-pointer transition-colors shadow-xs shrink-0"
                   >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>{atualizandoStatus ? "Processando..." : "Marcar como Concluído"}</span>
+                    <span>{atualizandoStatus ? "Processando..." : "Colocar em Correção"}</span>
                   </button>
                 </div>
-              </form>
+              ) : (
+                <form onSubmit={handleVoltarParaCorrecaoComParecer} className="space-y-2.5">
+                  <textarea
+                    value={parecerOrientador}
+                    onChange={(e) => setParecerOrientador(e.target.value)}
+                    placeholder="Escreva aqui o parecer orientador com as diretrizes ou motivos da aprovação/correção (obrigatório)..."
+                    rows={3}
+                    required
+                    className="w-full px-3 py-2 text-xs bg-white border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
+                  />
+                  <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                    <button
+                      type="submit"
+                      disabled={atualizandoStatus || !parecerOrientador.trim()}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 disabled:opacity-50 text-amber-800 text-xs font-bold cursor-pointer transition-colors"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>{atualizandoStatus ? "Processando..." : "Voltar para Em andamento"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={atualizandoStatus || !parecerOrientador.trim()}
+                      onClick={handleConcluirComParecer}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold cursor-pointer transition-colors shadow-xs"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{atualizandoStatus ? "Processando..." : "Marcar como Concluído"}</span>
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
 

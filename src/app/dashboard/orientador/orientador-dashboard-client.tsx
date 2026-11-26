@@ -60,13 +60,9 @@ type ColunaOrientadorKey = (typeof COLUNAS_ORIENTADOR)[number]["key"];
  * - Concluído: alunos que já concluíram 100% do TCC que participam (TCC 1 ou TCC 2) (APROVADO ou DEFENDIDO)
  */
 function mapAlunoParaColunaOrientador(t: TccResumo): ColunaOrientadorKey {
-  if (t.statusGeral === "APROVADO" || t.statusGeral === "DEFENDIDO") {
+  if (t.statusGeral === "APROVADO" || t.statusGeral === "DEFENDIDO" || t.statusGeral === "AGUARDANDO_BANCA") {
     return "Concluído";
   }
-  if (t.statusGeral === "AGUARDANDO_BANCA") {
-    return "Em revisão";
-  }
-  // Se for EM_ANDAMENTO, verificamos se há indicação de revisão ou pendente
   return "Pendente";
 }
 

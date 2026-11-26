@@ -452,18 +452,34 @@ export async function listarTccsDaBanca(sessao: AuthenticatedSession): Promise<T
   if (!idsParaBuscar.length) return [];
 
   // Busca vínculos de banca onde o avaliador_id é o id do professor_avaliador ou o usuario_id
-  const bancas = docs<BancaAvaliacao>(
-    await db().collection("bancas_avaliacao").where("avaliador_id", "in", idsParaBuscar).get(),
-  );
-  if (!bancas.length) return [];
-
-  const [tccsPorId, avaliacoesPorBanca, finais] = await Promise.all([
-    porIds<TCC>("tccs", bancas.map((b) => b.tcc_id)),
-    porIds<Avaliacao>("avaliacoes", bancas.map((b) => b.id)),
-    versoesFinais(bancas.map((b) => b.tcc_id)),
+  const [bancasSnap, tccsDiretosSnap] = await Promise.all([
+    db().collection("bancas_avaliacao").where("avaliador_id", "in", idsParaBuscar).get(),
+    db().collection("tccs").where("avaliadoresUids", "array-contains", sessao.usuario.id).get(),
   ]);
 
-  const bancaPorTcc = new Map(bancas.map((b) => [b.tcc_id, b]));
+  const bancas = docs<BancaAvaliacao>(bancasSnap);
+  const tccsDiretos = docs<TCC>(tccsDiretosSnap);
+  const bancaPorTcc = new Map<string, BancaAvaliacao>(bancas.map((b) => [b.tcc_id, b]));
+
+  for (const t of tccsDiretos) {
+    if (!bancaPorTcc.has(t.id)) {
+      bancaPorTcc.set(t.id, {
+        id: `banca-${t.id}-${sessao.usuario.id}`,
+        tcc_id: t.id,
+        avaliador_id: sessao.usuario.id,
+      });
+    }
+  }
+
+  const todosTccIds = [...bancaPorTcc.keys()];
+  if (!todosTccIds.length) return [];
+
+  const [tccsPorId, avaliacoesPorBanca, finais] = await Promise.all([
+    porIds<TCC>("tccs", todosTccIds),
+    porIds<Avaliacao>("avaliacoes", [...bancaPorTcc.values()].map((b) => b.id)),
+    versoesFinais(todosTccIds),
+  ]);
+
   const resumos = await enriquecer([...tccsPorId.values()]);
 
   return resumos
