@@ -207,7 +207,7 @@ export function SalaEtapaView({
     }
   };
 
-  // Envio real: Blob -> confirmação no Firestore -> atualização da sala.
+  // Envio real: Supabase Storage -> confirmação no Firestore -> atualização da sala.
   const handleEnviarTrabalho = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!arquivoUpload || !podeEnviar || enviando) return;
@@ -946,7 +946,7 @@ export function SalaEtapaView({
           {uploadSucesso && (
             <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs font-medium flex items-center gap-2.5">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>Arquivo salvo no Vercel Blob e registrado no histórico de versões.</span>
+              <span>Arquivo salvo no Supabase Storage e registrado no histórico de versões.</span>
             </div>
           )}
 

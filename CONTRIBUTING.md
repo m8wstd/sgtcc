@@ -36,7 +36,7 @@ Adotamos um modelo de branches baseado em GitFlow:
 - **npm** (ou gerenciador compatível).
 - **Git**: Controle de versão.
 - Projeto configurado no **Firebase Console** (Auth + Firestore).
-- Token de acesso ao **Vercel Blob Storage** (para upload e visualização de PDFs/documentos).
+- Projeto configurado no **Supabase** (Storage bucket criado para PDFs e documentos).
 
 ### Clonar e Instalar Dependências
 ```bash
@@ -69,8 +69,11 @@ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="seu-projeto.appspot.com"
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="..."
 NEXT_PUBLIC_FIREBASE_APP_ID="..."
 
-# Vercel Blob Storage (Armazenamento de Arquivos)
-BLOB_READ_WRITE_TOKEN="vercel_blob_rw_..."
+# Supabase Storage (Armazenamento de Arquivos)
+NEXT_PUBLIC_SUPABASE_URL="https://seu-projeto.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="sb_publishable_..."
+SUPABASE_SERVICE_ROLE_KEY="sb_secret_..."
+SUPABASE_STORAGE_BUCKET="sgtcc"
 
 # Sessão e Seed
 SESSION_SECRET="uma-chave-secreta-longa-para-cookies-de-sessao"
@@ -167,8 +170,8 @@ src/
   - **Proteção Open Redirect**: Use sempre `destinoSeguro(next)` em fluxos de redirecionamento para aceitar apenas rotas internas do dashboard.
 
 ### 3. Upload de Arquivos
-- Uploads de PDFs e materiais de apoio utilizam o **Vercel Blob Storage** (`@vercel/blob`).
-- O backend valida a extensão do arquivo e armazena metadados (URL pública/privada, data, tamanho, número da versão) na coleção correspondente do Firestore.
+- Uploads de monografias, entregas e materiais de apoio utilizam o **Supabase Storage** (`@supabase/supabase-js`).
+- O backend valida a extensão do arquivo e armazena metadados (URL pública do Supabase, data, tamanho, número da versão) na coleção correspondente do Firestore.
 
 ---
 

@@ -13,7 +13,7 @@ Desenvolvido com foco em usabilidade, segurança, tempo real e alta fidelidade a
 - **UI & Estilização:** [React](https://react.dev/) 19, [Tailwind CSS](https://tailwindcss.com/) v4, [Base UI](https://base-ui.com/), [Lucide React](https://lucide.dev/)
 - **Backend & Database:** [Firebase Admin](https://firebase.google.com/docs/admin/setup) & [Google Cloud Firestore](https://firebase.google.com/docs/firestore)
 - **Autenticação:** [Firebase Authentication](https://firebase.google.com/docs/auth) com Sessão em Cookies HTTP-Only assinado e Custom Claims
-- **Armazenamento de Arquivos:** [Vercel Blob Storage](https://vercel.com/docs/storage/vercel-blob)
+- **Armazenamento de Arquivos:** [Supabase Storage](https://supabase.com/storage) (bucket dedicado para PDFs, versionamento de entregas e materiais)
 - **Testes Automatizados:** [Vitest](https://vitest.dev/) (23 suítes com 153+ testes unitários e de integração)
 
 ---
@@ -68,14 +68,14 @@ O papel de Professor unifica as duas atuações acadêmicas:
 ```plaintext
 sgtcc/
 ├── scripts/
-│   └── seed.ts                     # Script de população do banco de dados (Auth + Firestore + Blobs)
+│   └── seed.ts                     # Script de população do banco de dados (Auth + Firestore + Supabase Storage)
 ├── src/
 │   ├── app/
 │   │   ├── api/                    # Rotas de API e Route Handlers seguros
 │   │   │   ├── admin/              # Usuários e convites do Admin
 │   │   │   ├── auth/               # Login, sessão, cadastro por token
 │   │   │   ├── coordenacao/        # Alocação, bancas, cronograma e criação de TCC
-│   │   │   ├── documentos/         # Uploads e gerenciamento no Vercel Blob
+│   │   │   ├── documentos/         # Uploads, visualização e download no Supabase Storage
 │   │   │   ├── mensagens/          # Sistema de mensageria
 │   │   │   └── tcc/                # Ações de etapas, postagens e avaliações de TCC
 │   │   ├── cadastro/               # Tela de cadastro via token de convite
@@ -118,7 +118,7 @@ sgtcc/
 - [Node.js](https://nodejs.org/) versão 20 ou superior
 - [npm](https://www.npmjs.com/) ou [pnpm](https://pnpm.io/)
 - Projeto configurado no [Firebase](https://firebase.google.com/) com Firestore e Auth ativos
-- Conta no [Vercel](https://vercel.com/) com Vercel Blob habilitado (para uploads de arquivos)
+- Projeto configurado no [Supabase](https://supabase.com/) com Storage bucket criado (ex: `sgtcc`) para upload e download de arquivos e monografias
 
 ### 1. Clonar o repositório e instalar dependências
 ```bash
@@ -144,8 +144,11 @@ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET="seu-projeto.appspot.com"
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID="..."
 NEXT_PUBLIC_FIREBASE_APP_ID="..."
 
-# Vercel Blob Storage
-BLOB_READ_WRITE_TOKEN="vercel_blob_rw_..."
+# Supabase Storage (Armazenamento de Arquivos)
+NEXT_PUBLIC_SUPABASE_URL="https://seu-projeto.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="sb_publishable_..."
+SUPABASE_SERVICE_ROLE_KEY="sb_secret_..."
+SUPABASE_STORAGE_BUCKET="sgtcc"
 
 # Sessão e Segurança
 SESSION_SECRET="chave-secreta-longa-para-cookies"

@@ -3,6 +3,7 @@ import { getDocumentAccessRecord } from "@/lib/auth/firestore-repository";
 import { getAuthenticatedSession } from "@/lib/auth/session";
 import { AuthHttpError, toAuthErrorResponse } from "@/lib/auth/errors";
 import { nomeExibicaoDoArquivo } from "@/lib/entregas/regras";
+import { baixarDoSupabase } from "@/lib/supabase/storage";
 
 export const runtime = "nodejs";
 
@@ -18,34 +19,43 @@ async function acessar(request: Request, context: Context, somenteVerificar: boo
     assertDocumentAccess(sessao, registro.tcc, registro.context);
 
     const arquivoUrl = registro.arquivo.arquivoUrl;
-    // Registros antigos do seed possuem apenas caminhos, sem bytes no Blob.
-    if (!/^https:\/\/[^/]+\.(private|public)\.blob\.vercel-storage\.com\//i.test(arquivoUrl)) {
-      const msg = "Este registro não possui arquivo real no Vercel Blob. Envie uma nova versão ou migre o documento.";
-      return new Response(somenteVerificar ? null : JSON.stringify({ error: "BLOB_NOT_FOUND", message: msg }), {
-        status: 404, headers: { "x-document-error": msg, ...(somenteVerificar ? {} : { "Content-Type": "application/json" }) },
-      });
-    }
 
     let stream: ReadableStream<Uint8Array> | null = null;
     let mime: string | null = null;
-    if (new URL(arquivoUrl).hostname.endsWith(".private.blob.vercel-storage.com")) {
-      const resultado = await get(arquivoUrl, { access: "private" });
-      if (!resultado || resultado.statusCode !== 200 || !resultado.stream) {
-        const msg = "Arquivo não encontrado na store privada configurada. Verifique BLOB_READ_WRITE_TOKEN.";
-        return new Response(null, { status: 404, headers: { "x-document-error": msg } });
+
+    // 1. Suporte nativo a Supabase Storage
+    if (arquivoUrl.includes(".supabase.co/storage/v1/object/public/")) {
+      const resSupabase = await baixarDoSupabase(arquivoUrl);
+      if (!resSupabase) {
+        const msg = "Arquivo não encontrado no Supabase Storage.";
+        return new Response(somenteVerificar ? null : JSON.stringify({ error: "STORAGE_NOT_FOUND", message: msg }), {
+          status: 404,
+          headers: { "x-document-error": msg, ...(somenteVerificar ? {} : { "Content-Type": "application/json" }) },
+        });
       }
-      stream = resultado.stream;
-      mime = resultado.blob.contentType;
-    } else {
-      // Compatibilidade com a store pública já utilizada pelo grupo.
-      // A URL nunca é devolvida ao navegador, mas o objeto antigo continua público na origem.
+      stream = resSupabase.data.stream() as unknown as ReadableStream<Uint8Array>;
+      mime = resSupabase.contentType;
+    }
+    // 2. Retrocompatibilidade para URLs do Vercel Blob público
+    else if (/^https:\/\/[^/]+\.(private|public)\.blob\.vercel-storage\.com\//i.test(arquivoUrl)) {
       const remoto = await fetch(arquivoUrl, { cache: "no-store" });
       if (!remoto.ok || !remoto.body) {
-        const msg = "Arquivo não encontrado no Vercel Blob público.";
+        const msg = "Arquivo não encontrado no storage legado.";
         return new Response(null, { status: 404, headers: { "x-document-error": msg } });
       }
       stream = remoto.body;
       mime = remoto.headers.get("content-type");
+    } else {
+      const msg = "Registro de arquivo sem armazenamento ativo associado.";
+      return new Response(somenteVerificar ? null : JSON.stringify({ error: "NOT_FOUND", message: msg }), {
+        status: 404,
+        headers: { "x-document-error": msg, ...(somenteVerificar ? {} : { "Content-Type": "application/json" }) },
+      });
+    }
+
+    if (!stream) {
+      const msg = "Não foi possível carregar os dados do arquivo.";
+      return new Response(null, { status: 404, headers: { "x-document-error": msg } });
     }
 
     if (somenteVerificar) {
@@ -55,8 +65,10 @@ async function acessar(request: Request, context: Context, somenteVerificar: boo
 
     const nome = nomeExibicaoDoArquivo(arquivoUrl).replace(/["\\\r\n]/g, "_");
     const baixar = new URL(request.url).searchParams.get("download") === "1";
-    const contentType = nome.toLowerCase().endsWith(".pdf") ? "application/pdf" :
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const contentType = nome.toLowerCase().endsWith(".pdf")
+      ? "application/pdf"
+      : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
     return new Response(stream, {
       headers: {
         "Content-Type": mime && mime !== "application/octet-stream" ? mime : contentType,
@@ -69,9 +81,16 @@ async function acessar(request: Request, context: Context, somenteVerificar: boo
   } catch (error) {
     if (error instanceof AuthHttpError) return toAuthErrorResponse(error);
     console.error("[RF03] Falha ao recuperar documento:", error);
-    return Response.json({ error: "DOCUMENT_ERROR", message: "Não foi possível recuperar o documento no Blob." }, { status: 503 });
+    return Response.json(
+      { error: "DOCUMENT_ERROR", message: "Não foi possível recuperar o documento no Storage." },
+      { status: 503 }
+    );
   }
 }
 
-export async function GET(request: Request, context: Context) { return acessar(request, context, false); }
-export async function HEAD(request: Request, context: Context) { return acessar(request, context, true); }
+export async function GET(request: Request, context: Context) {
+  return acessar(request, context, false);
+}
+export async function HEAD(request: Request, context: Context) {
+  return acessar(request, context, true);
+}
