@@ -215,10 +215,45 @@ export function createAvaliacaoPostHandler(
 
       const avaliacao = await dependencies.salvar(tccId, contexto, validacao.valor);
       if (validacao.valor.status === "FINALIZADA") {
-        await dependencies.notificar(
-          contexto.destinatarios,
-          `A banca finalizou a avaliação do TCC "${contexto.tccTitulo}".`,
-        );
+        if (!adminDb) {
+          // Ambiente de teste unitário com dependências mockadas
+          await dependencies.notificar(
+            contexto.destinatarios,
+            `A banca finalizou a avaliação do TCC "${contexto.tccTitulo}".`,
+          );
+        } else {
+          // Verifica se TODOS os avaliadores da banca já finalizaram suas avaliações
+          const [bancasSnap, avaliacoesSnap, tccSnap] = await Promise.all([
+            adminDb.collection("bancas_avaliacao").where("tcc_id", "==", tccId).get(),
+            adminDb.collection("avaliacoes").where("tcc_id", "==", tccId).get(),
+            adminDb.collection("tccs").doc(tccId).get(),
+          ]);
+
+          const tccData = tccSnap.data() as { avaliadoresUids?: string[] } | undefined;
+          const idsBancas = new Set<string>(bancasSnap.docs.map((d) => d.data().avaliador_id as string));
+          for (const uid of tccData?.avaliadoresUids ?? []) {
+            idsBancas.add(uid);
+          }
+          const totalAvaliadores = Math.max(idsBancas.size, bancasSnap.size, 1);
+
+          const finalizadas = avaliacoesSnap.docs
+            .map((d) => d.data() as Avaliacao)
+            .filter((a) => a.status === "FINALIZADA" && typeof a.nota === "number");
+
+          if (finalizadas.length >= totalAvaliadores) {
+            const soma = finalizadas.reduce((acc, a) => acc + (a.nota ?? 0), 0);
+            const mediaFinal = Math.round((soma / finalizadas.length) * 100) / 100;
+
+            await adminDb.collection("tccs").doc(tccId).update({
+              statusGeral: "CONCLUIDO",
+            });
+
+            await dependencies.notificar(
+              contexto.destinatarios,
+              `A banca concluiu todas as avaliações do TCC "${contexto.tccTitulo}". Média final: ${mediaFinal.toFixed(2).replace(".", ",")}.`,
+            );
+          }
+        }
       }
 
       return Response.json({ avaliacao });

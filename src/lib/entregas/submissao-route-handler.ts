@@ -220,6 +220,10 @@ async function salvarSupabase(
       });
     }
 
+    if (marco.id === "entrega-final") {
+      batch.update(db.collection("tccs").doc(tccId), { statusGeral: "AGUARDANDO_BANCA" });
+    }
+
     try {
       await batch.commit();
       return {

@@ -13,7 +13,11 @@ interface FloatingHubProps {
 
 export function FloatingHub({ perfil }: FloatingHubProps) {
   const pathname = usePathname();
-  const inicioHref = homeDoPerfil(perfil);
+  const emModoAvaliador =
+    perfil === PerfilEnum.AVALIADOR ||
+    pathname.startsWith("/dashboard/avaliador") ||
+    pathname.endsWith("/banca");
+  const inicioHref = emModoAvaliador ? "/dashboard/avaliador" : homeDoPerfil(perfil);
 
   // No momento, conforme especificado: só temos a aba 'Início' (renomeada de 'Dashboard')
   // Com visual preparado e expansível para futuras abas
@@ -22,7 +26,9 @@ export function FloatingHub({ perfil }: FloatingHubProps) {
       rotulo:
         perfil === PerfilEnum.ALUNO
           ? "Aluno"
-          : perfil === PerfilEnum.ORIENTADOR || perfil === PerfilEnum.AVALIADOR
+          : emModoAvaliador
+          ? "Avaliador"
+          : perfil === PerfilEnum.ORIENTADOR
           ? "Orientações"
           : perfil === PerfilEnum.COORDENACAO
           ? "Coordenação"

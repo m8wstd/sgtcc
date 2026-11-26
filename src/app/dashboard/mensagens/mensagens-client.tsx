@@ -24,6 +24,8 @@ export function MensagensClient({
   const [carregandoMsgs, setCarregandoMsgs] = useState(false);
 
   const msgsEndRef = useRef<HTMLDivElement>(null);
+  const ultimoMsgIdRef = useRef<string | null>(null);
+  const ultimaConversaRef = useRef<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 1. Carregar lista de conversas
@@ -80,10 +82,19 @@ export function MensagensClient({
     }
   }, [conversaAtivaId]);
 
-  // Scroll para o fim sempre que mensagens mudarem
+  // Scroll para o fim apenas ao trocar de conversa ou quando chegar uma mensagem nova
   useEffect(() => {
-    msgsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [mensagens]);
+    const ultimoId = mensagens[mensagens.length - 1]?.id ?? null;
+    const trocouConversa = ultimaConversaRef.current !== conversaAtivaId;
+    const chegouNova = ultimoId !== null && ultimoId !== ultimoMsgIdRef.current;
+
+    if (trocouConversa || chegouNova) {
+      msgsEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    ultimaConversaRef.current = conversaAtivaId;
+    ultimoMsgIdRef.current = ultimoId;
+  }, [mensagens, conversaAtivaId]);
 
   const handleEnviar = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -308,29 +319,35 @@ export function MensagensClient({
               </div>
 
               {/* Input de Envio (.wi) */}
-              <form
-                onSubmit={handleEnviar}
-                className="flex items-center gap-2 p-3 bg-white border-t border-[#dfe2e8]"
-              >
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={texto}
-                  onChange={(e) => setTexto(e.target.value)}
-                  placeholder="Digite uma mensagem..."
-                  aria-label="Mensagem"
-                  autoComplete="off"
-                  className="flex-1 min-w-0 px-4 py-2 text-xs border border-[#dfe2e8] rounded-full bg-[#f4f5f7] text-[#111a2e] focus:outline-none focus:border-[#1e78f0] focus:ring-1 focus:ring-[#1e78f0]"
-                />
-                <button
-                  type="submit"
-                  disabled={!texto.trim() || enviando}
-                  className="bg-[#1e78f0] hover:bg-[#1a6cd8] disabled:opacity-50 text-white px-4 py-2 rounded-full font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs shrink-0"
+              {conversaAtiva?.somenteLeitura ? (
+                <div className="p-3 bg-[#f4f5f7] border-t border-[#dfe2e8] text-center text-xs text-[#6b7385]">
+                  Você não faz mais parte deste grupo. Visualizando apenas o histórico de mensagens.
+                </div>
+              ) : (
+                <form
+                  onSubmit={handleEnviar}
+                  className="flex items-center gap-2 p-3 bg-white border-t border-[#dfe2e8]"
                 >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Enviar</span>
-                </button>
-              </form>
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={texto}
+                    onChange={(e) => setTexto(e.target.value)}
+                    placeholder="Digite uma mensagem..."
+                    aria-label="Mensagem"
+                    autoComplete="off"
+                    className="flex-1 min-w-0 px-4 py-2 text-xs border border-[#dfe2e8] rounded-full bg-[#f4f5f7] text-[#111a2e] focus:outline-none focus:border-[#1e78f0] focus:ring-1 focus:ring-[#1e78f0]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!texto.trim() || enviando}
+                    className="bg-[#1e78f0] hover:bg-[#1a6cd8] disabled:opacity-50 text-white px-4 py-2 rounded-full font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs shrink-0"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Enviar</span>
+                  </button>
+                </form>
+              )}
             </>
           ) : (
             <div className="m-auto text-center p-8 text-xs text-[#6b7385]">

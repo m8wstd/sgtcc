@@ -58,11 +58,20 @@ export type ResultadoValidacao =
 
 const DECISOES: readonly DecisaoBanca[] = ["APROVADO", "APROVADO_RESSALVAS", "REPROVADO"];
 
-/** Aceita "9.5", "9,5" ou número; devolve undefined se vazio, NaN se inválido. */
+/** Aceita "9.5", "9,5" ou número com até 2 casas decimais; devolve undefined se vazio, NaN se inválido. */
 export function lerNota(v: unknown): number | undefined {
   if (v === undefined || v === null || v === "") return undefined;
-  const n = typeof v === "number" ? v : Number(String(v).trim().replace(",", "."));
-  return Number.isFinite(n) ? Math.round(n * 100) / 100 : Number.NaN;
+  if (typeof v === "string") {
+    const limpo = v.trim();
+    if (!/^\d+([.,]\d{1,2})?$/.test(limpo)) return Number.NaN;
+    const n = Number(limpo.replace(",", "."));
+    return Number.isFinite(n) ? n : Number.NaN;
+  }
+  const n = typeof v === "number" ? v : Number.NaN;
+  if (!Number.isFinite(n)) return Number.NaN;
+  // Garante no máximo 2 casas decimais
+  if (Math.round(n * 100) !== n * 100) return Number.NaN;
+  return n;
 }
 
 export function validarAvaliacao(entrada: AvaliacaoEntrada): ResultadoValidacao {
@@ -72,8 +81,8 @@ export function validarAvaliacao(entrada: AvaliacaoEntrada): ResultadoValidacao 
   }
 
   const nota = lerNota(entrada.nota);
-  if (nota !== undefined && (Number.isNaN(nota) || nota < 0 || nota > 10)) {
-    return { ok: false, mensagem: "A nota deve ser um número entre 0 e 10." };
+  if (nota !== undefined && (Number.isNaN(nota) || nota < 1 || nota > 10)) {
+    return { ok: false, mensagem: "A nota deve ser um número entre 1 e 10 com no máximo 2 casas decimais." };
   }
 
   let decisao: DecisaoBanca | undefined;

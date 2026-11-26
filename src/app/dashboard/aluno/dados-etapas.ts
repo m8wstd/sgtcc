@@ -42,8 +42,10 @@ export function mapStatusParaColuna(status: string): ColunaKanbanKey {
     case "PRONTA_PARA_REVISAO":
       return "Para correção";
     case "EM_REVISAO":
-    case "SOLICITADA_CORRECAO":
       return "Em correção";
+    case "SOLICITADA_CORRECAO":
+    case "EM_ANDAMENTO":
+      return "Em andamento";
     case "CONCLUIDA":
       return "Concluído";
     default:

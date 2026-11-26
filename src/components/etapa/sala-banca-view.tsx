@@ -144,7 +144,14 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
     }
   }
 
-  const cabecalhoStatus = isAvaliador ? ROTULO_ETAPA_BANCA[etapa] : versaoFinal ? "Aguardando banca" : "Aguardando envio";
+  const bancaConcluida = totalAvaliadores > 0 && resultados.length >= totalAvaliadores;
+  const cabecalhoStatus = isAvaliador
+    ? ROTULO_ETAPA_BANCA[etapa]
+    : bancaConcluida
+      ? "Concluído"
+      : versaoFinal
+        ? "Aguardando banca"
+        : "Aguardando envio";
 
   return (
     <div className="space-y-6 w-full">
@@ -294,13 +301,17 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
                   type="button"
                   onClick={abrirEmNovaAba}
                   disabled={carregandoDoc}
-                  className="px-4 py-2 bg-[#1e78f0] hover:bg-[#1666d3] disabled:opacity-60 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  className="px-3.5 py-2 bg-white hover:bg-blue-50 border border-[#dfe2e8] disabled:opacity-60 text-[#1e78f0] text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  <Download className="w-4 h-4" />
-                  <span>{carregandoDoc ? "Baixando..." : "Fazer o download"}</span>
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>{carregandoDoc ? "Abrindo..." : "Ler aqui"}</span>
                 </button>
-                <a href={`/api/documentos/${encodeURIComponent(versaoFinal.id)}?download=1`} className="px-4 py-2 bg-white hover:bg-[#f4f5f7] border border-[#dfe2e8] text-[#111a2e] text-xs font-bold rounded-lg inline-flex items-center gap-1.5">
-                  <Download className="w-4 h-4" /> Baixar
+                <a
+                  href={`/api/documentos/${encodeURIComponent(versaoFinal.id)}?download=1`}
+                  className="px-3.5 py-2 bg-[#1e78f0] hover:bg-[#1666d3] text-white text-xs font-semibold rounded-lg inline-flex items-center gap-1.5 transition-colors shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Baixar Arquivo</span>
                 </a>
               </div>
             </div>
@@ -376,8 +387,16 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
                     type="text"
                     inputMode="decimal"
                     value={nota}
-                    onChange={(e) => setNota(e.target.value)}
-                    placeholder="Ex: 9,5"
+                    onChange={(e) => {
+                      const val = e.target.value.replace(",", ".");
+                      if (val === "" || /^\d{1,2}(\.\d{0,2})?$/.test(val)) {
+                        const num = Number(val);
+                        if (val === "" || (num >= 1 && num <= 10) || (val.length === 1 && num === 1)) {
+                          setNota(e.target.value);
+                        }
+                      }
+                    }}
+                    placeholder="Ex: 9,50 (1 a 10)"
                     className="w-full px-3 py-2 text-xs border border-[#dfe2e8] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1e78f0]"
                   />
                 </div>
@@ -455,6 +474,25 @@ export function SalaBancaView({ sala, papelUsuario, voltarHref }: SalaBancaViewP
                 {resultados.length} de {totalAvaliadores} avaliações finalizadas
                 {tcc.defesaEm ? ` · defesa em ${formatarData(tcc.defesaEm)}` : ""}
               </p>
+              {totalAvaliadores > 0 && resultados.length >= totalAvaliadores && (() => {
+                const comNota = resultados.filter((r) => typeof r.nota === "number");
+                if (comNota.length === 0) return null;
+                const soma = comNota.reduce((acc, r) => acc + (r.nota ?? 0), 0);
+                const mediaFinal = Math.round((soma / comNota.length) * 100) / 100;
+                return (
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-bold text-emerald-900">Média Final da Banca</p>
+                      <p className="text-[11px] text-emerald-700">
+                        Calculada a partir das {comNota.length} avaliações finalizadas
+                      </p>
+                    </div>
+                    <span className="text-base font-extrabold text-emerald-800 bg-white px-3 py-1 rounded-full border border-emerald-300">
+                      {mediaFinal.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                );
+              })()}
               {resultados.map((r) => (
                 <div key={r.id} className="p-4 bg-[#f4f5f7] border-l-4 border-emerald-500 rounded-lg space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">

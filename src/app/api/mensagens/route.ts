@@ -15,6 +15,8 @@ export interface ConversaItem {
   subtitulo?: string;
   tccId?: string;
   participantesUids: string[];
+  exParticipantesUids?: string[];
+  somenteLeitura?: boolean;
   ultimaMensagem?: {
     texto: string;
     autorNome: string;
@@ -58,9 +60,21 @@ export async function GET(request: Request) {
 
       const conversaData = conversaDoc.data();
       const participantes: string[] = conversaData?.participantesUids ?? [];
-      if (!participantes.includes(sessao.uid) && sessao.perfil !== PerfilEnum.ADMIN) {
+      const exParticipantes: string[] = conversaData?.exParticipantesUids ?? [];
+      const ehParticipanteAtual = participantes.includes(sessao.uid);
+      const ehExParticipante = exParticipantes.includes(sessao.uid);
+
+      if (!ehParticipanteAtual && !ehExParticipante && sessao.perfil !== PerfilEnum.ADMIN) {
         return NextResponse.json({ error: "FORBIDDEN", message: "Acesso negado." }, { status: 403 });
       }
+
+      const saidaRaw = !ehParticipanteAtual && ehExParticipante ? conversaData?.saidaEm?.[sessao.uid] : null;
+      const saidaMs =
+        saidaRaw instanceof Timestamp
+          ? saidaRaw.toMillis()
+          : typeof saidaRaw === "string"
+            ? new Date(saidaRaw).getTime()
+            : null;
 
       const msgsSnap = await adminDb
         .collection("conversas")
@@ -70,7 +84,19 @@ export async function GET(request: Request) {
         .limit(100)
         .get();
 
-      const mensagens: MensagemChat[] = msgsSnap.docs.map((doc) => {
+      const mensagens: MensagemChat[] = msgsSnap.docs
+        .filter((doc) => {
+          if (saidaMs === null || Number.isNaN(saidaMs)) return true;
+          const d = doc.data();
+          const msgMs =
+            d.criadoEm instanceof Timestamp
+              ? d.criadoEm.toMillis()
+              : typeof d.criadoEm === "string"
+                ? new Date(d.criadoEm).getTime()
+                : 0;
+          return msgMs <= saidaMs;
+        })
+        .map((doc) => {
         const d = doc.data();
         let criadoEmIso = new Date().toISOString();
         let hora = "";
@@ -100,21 +126,31 @@ export async function GET(request: Request) {
     }
 
     // Caso 2: Listar conversas do usuário ou gerar automaticamente as conversas do TCC
-    // Primeiro busca conversas existentes no Firestore onde ele é participante
-    const snap = await adminDb
-      .collection("conversas")
-      .where("participantesUids", "array-contains", sessao.uid)
-      .get();
+    // Primeiro busca conversas existentes no Firestore onde ele é participante atual ou ex-participante (histórico)
+    const [snap, snapEx] = await Promise.all([
+      adminDb.collection("conversas").where("participantesUids", "array-contains", sessao.uid).get(),
+      adminDb.collection("conversas").where("exParticipantesUids", "array-contains", sessao.uid).get(),
+    ]);
 
-    const conversasExistentes: ConversaItem[] = snap.docs.map((doc) => {
+    const docsMap = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+    for (const doc of snap.docs) docsMap.set(doc.id, doc);
+    for (const doc of snapEx.docs) {
+      if (!docsMap.has(doc.id)) docsMap.set(doc.id, doc);
+    }
+
+    const conversasExistentes: ConversaItem[] = Array.from(docsMap.values()).map((doc) => {
       const d = doc.data();
+      const participantesUids: string[] = d.participantesUids ?? [];
+      const exParticipantesUids: string[] = d.exParticipantesUids ?? [];
       return {
         id: doc.id,
         tipo: d.tipo ?? "DIRETA",
         titulo: d.titulo ?? "Conversa",
         subtitulo: d.subtitulo ?? "",
         tccId: d.tccId,
-        participantesUids: d.participantesUids ?? [],
+        participantesUids,
+        exParticipantesUids,
+        somenteLeitura: !participantesUids.includes(sessao.uid) && exParticipantesUids.includes(sessao.uid),
         ultimaMensagem: d.ultimaMensagem,
       };
     });
@@ -254,9 +290,46 @@ export async function GET(request: Request) {
 
       // 1. Grupo do TCC (todos os integrantes do TCC: alunos + orientador + avaliadores)
       const grupoTccId = `grupo-tcc-${tccDoc.id}`;
-      if (!conversasExistentes.some((c) => c.id === grupoTccId)) {
-        const integrantes = [...new Set([alunoUid, orientadorUid, ...avaliadoresUids].filter(Boolean))];
-        if (integrantes.includes(sessao.uid)) {
+      const integrantes = [...new Set([alunoUid, orientadorUid, ...avaliadoresUids].filter(Boolean))];
+      const grupoExistente = conversasExistentes.find((c) => c.id === grupoTccId);
+
+      if (!grupoExistente) {
+        const grupoRef = adminDb.collection("conversas").doc(grupoTccId);
+        const grupoSnap = await grupoRef.get();
+        if (grupoSnap.exists) {
+          const gd = grupoSnap.data() ?? {};
+          const atuais: string[] = gd.participantesUids ?? [];
+          const exAtuais: string[] = gd.exParticipantesUids ?? [];
+          const mudou =
+            atuais.length !== integrantes.length || integrantes.some((u) => !atuais.includes(u));
+
+          if (mudou) {
+            const removidos = atuais.filter((u) => !integrantes.includes(u));
+            const novoEx = [...new Set([...exAtuais.filter((u) => !integrantes.includes(u)), ...removidos])];
+            const saidaEmUpdate: Record<string, Timestamp> = { ...(gd.saidaEm ?? {}) };
+            const agora = Timestamp.now();
+            for (const r of removidos) saidaEmUpdate[r] = agora;
+
+            await grupoRef.update({
+              participantesUids: integrantes,
+              exParticipantesUids: novoEx,
+              saidaEm: saidaEmUpdate,
+              subtitulo: `Grupo do TCC (${integrantes.length} integrantes)`,
+            });
+          }
+
+          if (integrantes.includes(sessao.uid)) {
+            conversasExistentes.push({
+              id: grupoTccId,
+              tipo: "GRUPO",
+              titulo: gd.titulo ?? `Grupo: ${tcc.titulo}`,
+              subtitulo: `Grupo do TCC (${integrantes.length} integrantes)`,
+              tccId: tccDoc.id,
+              participantesUids: integrantes,
+              ultimaMensagem: gd.ultimaMensagem,
+            });
+          }
+        } else if (integrantes.includes(sessao.uid)) {
           const novoGrupo = {
             id: grupoTccId,
             tipo: "GRUPO" as const,
@@ -266,7 +339,7 @@ export async function GET(request: Request) {
             participantesUids: integrantes,
             criadoEm: Timestamp.now(),
           };
-          await adminDb.collection("conversas").doc(grupoTccId).set(novoGrupo, { merge: true });
+          await grupoRef.set(novoGrupo, { merge: true });
           conversasExistentes.push({
             id: grupoTccId,
             tipo: "GRUPO",
@@ -275,6 +348,33 @@ export async function GET(request: Request) {
             tccId: tccDoc.id,
             participantesUids: integrantes,
           });
+        }
+      } else {
+        const atuais = grupoExistente.participantesUids ?? [];
+        const mudou =
+          atuais.length !== integrantes.length || integrantes.some((u) => !atuais.includes(u));
+        if (mudou) {
+          const grupoRef = adminDb.collection("conversas").doc(grupoTccId);
+          const grupoSnap = await grupoRef.get();
+          const gd = grupoSnap.data() ?? {};
+          const exAtuais: string[] = gd.exParticipantesUids ?? [];
+          const removidos = atuais.filter((u) => !integrantes.includes(u));
+          const novoEx = [...new Set([...exAtuais.filter((u) => !integrantes.includes(u)), ...removidos])];
+          const saidaEmUpdate: Record<string, Timestamp> = { ...(gd.saidaEm ?? {}) };
+          const agora = Timestamp.now();
+          for (const r of removidos) saidaEmUpdate[r] = agora;
+
+          await grupoRef.update({
+            participantesUids: integrantes,
+            exParticipantesUids: novoEx,
+            saidaEm: saidaEmUpdate,
+            subtitulo: `Grupo do TCC (${integrantes.length} integrantes)`,
+          });
+
+          grupoExistente.participantesUids = integrantes;
+          grupoExistente.exParticipantesUids = novoEx;
+          grupoExistente.subtitulo = `Grupo do TCC (${integrantes.length} integrantes)`;
+          grupoExistente.somenteLeitura = !integrantes.includes(sessao.uid) && novoEx.includes(sessao.uid);
         }
       }
 
@@ -308,6 +408,46 @@ export async function GET(request: Request) {
       }
     }
 
+    // Professores (orientadores e avaliadores) devem ter acesso a mandar mensagem aos coordenadores de seus cursos
+    if (sessao.perfil === PerfilEnum.ORIENTADOR || sessao.perfil === PerfilEnum.AVALIADOR) {
+      const cursosDoProf = new Set<string>(
+        tccsDocs.map((d) => d.data()?.curso as string | undefined).filter((c): c is string => Boolean(c)),
+      );
+      const coordsSnap = await adminDb.collection("usuarios").where("perfil", "==", PerfilEnum.COORDENACAO).get();
+      for (const coordDoc of coordsSnap.docs) {
+        const coordId = coordDoc.id;
+        if (coordId === sessao.uid) continue;
+        const coordData = coordDoc.data();
+        const cursosCoord: string[] = coordData?.cursosCoordenados ?? coordData?.cursos ?? [];
+        const atendeCurso =
+          cursosCoord.length === 0 ||
+          cursosDoProf.size === 0 ||
+          cursosCoord.some((c) => cursosDoProf.has(c));
+
+        if (!atendeCurso) continue;
+
+        const canalCoordId = `direta-${[sessao.uid, coordId].sort().join("-")}`;
+        if (!conversasExistentes.some((c) => c.id === canalCoordId)) {
+          const novaCoord = {
+            id: canalCoordId,
+            tipo: "DIRETA" as const,
+            titulo: coordData?.nome ?? "Coordenação de TCC",
+            subtitulo: "Coordenação de TCC",
+            participantesUids: [sessao.uid, coordId],
+            criadoEm: Timestamp.now(),
+          };
+          await adminDb.collection("conversas").doc(canalCoordId).set(novaCoord, { merge: true });
+          conversasExistentes.push({
+            id: canalCoordId,
+            tipo: "DIRETA",
+            titulo: novaCoord.titulo,
+            subtitulo: novaCoord.subtitulo,
+            participantesUids: novaCoord.participantesUids,
+          });
+        }
+      }
+    }
+
     // Se o usuário for aluno ou professor e ainda não tiver conversas, oferece canal com a Coordenação
     if (conversasExistentes.length === 0) {
       const coordSnap = await adminDb.collection("usuarios").where("perfil", "==", PerfilEnum.COORDENACAO).limit(1).get();
@@ -331,6 +471,50 @@ export async function GET(request: Request) {
           subtitulo: novaCoord.subtitulo,
           participantesUids: novaCoord.participantesUids,
         });
+      }
+    }
+
+    // Resolve dinamicamente o título e subtítulo de conversas DIRETA para o outro participante
+    const outrosUids = Array.from(
+      new Set(
+        conversasExistentes
+          .filter((c) => c.tipo === "DIRETA")
+          .map((c) => c.participantesUids.find((uid) => uid !== sessao.uid))
+          .filter((uid): uid is string => Boolean(uid))
+      )
+    );
+
+    if (outrosUids.length > 0) {
+      const usuariosMap = new Map<string, { nome: string; perfil: string }>();
+      const refs = outrosUids.map((uid) => adminDb!.collection("usuarios").doc(uid));
+      const docsUsuarios = await adminDb.getAll(...refs);
+      for (const uDoc of docsUsuarios) {
+        if (uDoc.exists) {
+          const uData = uDoc.data();
+          usuariosMap.set(uDoc.id, {
+            nome: uData?.nome ?? "Usuário",
+            perfil: uData?.perfil ?? "",
+          });
+        }
+      }
+
+      const papelLabel: Record<string, string> = {
+        ALUNO: "Aluno",
+        ORIENTADOR: "Professor Orientador",
+        AVALIADOR: "Professor Avaliador",
+        COORDENACAO: "Coordenação de TCC",
+        ADMIN: "Administração",
+      };
+
+      for (const conv of conversasExistentes) {
+        if (conv.tipo === "DIRETA") {
+          const outroUid = conv.participantesUids.find((uid) => uid !== sessao.uid);
+          if (outroUid && usuariosMap.has(outroUid)) {
+            const info = usuariosMap.get(outroUid)!;
+            conv.titulo = info.nome;
+            conv.subtitulo = papelLabel[info.perfil] ?? conv.subtitulo;
+          }
+        }
       }
     }
 

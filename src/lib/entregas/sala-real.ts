@@ -17,7 +17,8 @@ export function montarSalaReal(
   const statusKanban: SalaEtapaTcc["statusKanban"] =
     statusBase === "CONCLUIDA" ? "Concluído" :
     statusBase === "PRONTA_PARA_REVISAO" ? "Para correção" :
-    statusBase === "EM_REVISAO" || statusBase === "SOLICITADA_CORRECAO" ? "Em correção" :
+    statusBase === "EM_REVISAO" ? "Em correção" :
+    statusBase === "SOLICITADA_CORRECAO" || statusBase === "EM_ANDAMENTO" ? "Em andamento" :
     item.versoes.length ? "Em andamento" : "Pendente";
 
   const data = new Date(String(item.marco.dataLimite));
