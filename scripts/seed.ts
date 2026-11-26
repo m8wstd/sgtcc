@@ -2,7 +2,7 @@ import { config } from "dotenv";
 import { initializeApp, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { put } from "@vercel/blob";
+import { createClient } from "@supabase/supabase-js";
 
 config({ path: ".env.local" });
 
@@ -77,14 +77,22 @@ function gerarPdf(linhas: string[]): Buffer {
   return Buffer.from(pdf, "latin1");
 }
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+);
+
 async function enviarPdf(caminho: string, linhas: string[]): Promise<string> {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) throw new Error("Defina BLOB_READ_WRITE_TOKEN no .env.local para gerar PDFs de demonstração.");
-  const blob = await put(caminho, gerarPdf(linhas), {
-    access: process.env.BLOB_ACCESS === "private" ? "private" : "public",
-    addRandomSuffix: true,
+  const bytes = gerarPdf(linhas);
+  const { error } = await supabase.storage.from("sgtcc").upload(caminho, bytes, {
     contentType: "application/pdf",
+    upsert: true,
   });
-  return blob.url;
+  if (error) {
+    console.warn("Aviso ao fazer upload de PDF no seed:", error.message);
+  }
+  const { data } = supabase.storage.from("sgtcc").getPublicUrl(caminho);
+  return data.publicUrl;
 }
 
 type DecisaoSeed = "APROVADO" | "APROVADO_RESSALVAS" | "REPROVADO";

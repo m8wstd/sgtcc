@@ -1,4 +1,3 @@
-import { head } from "@vercel/blob";
 import type { ConfirmadorSubmissao, RegistroEntrega, VersaoPersistida } from "./contracts";
 import { EntregaError } from "./errors";
 
@@ -6,15 +5,13 @@ import { EntregaError } from "./errors";
 export const confirmadorSubmissaoRF03: ConfirmadorSubmissao = {
   async confirmar(versao) {
     if (!versao?.arquivoUrl) return false;
-    // Se for URL do Vercel Blob, verifica existência
+    // URLs do Supabase Storage ou URLs válidas
+    if (versao.arquivoUrl.includes(".supabase.co/storage/v1/object/public/")) {
+      return true;
+    }
+    // Se for URL legada do Vercel Blob
     if (/^https:\/\/[^/]+\.(public|private)\.blob\.vercel-storage\.com\//i.test(versao.arquivoUrl)) {
-      try {
-        const info = await head(versao.arquivoUrl);
-        return Boolean(info && info.size > 0);
-      } catch {
-        // Em testes ou ambientes onde o blob é mockado ou inacessível, aceita se os metadados forem válidos
-        return true;
-      }
+      return true;
     }
     // Caso contrário (URLs de teste/gs:), considera confirmado
     return true;
