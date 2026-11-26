@@ -1,4 +1,3 @@
-import { get } from "@vercel/blob";
 import { assertDocumentAccess } from "@/lib/auth/authorization";
 import { getDocumentAccessRecord } from "@/lib/auth/firestore-repository";
 import { getAuthenticatedSession } from "@/lib/auth/session";

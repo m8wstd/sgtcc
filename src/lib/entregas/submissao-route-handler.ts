@@ -1,4 +1,4 @@
-import { put, del } from "@vercel/blob";
+import { uploadParaSupabase, removerDoSupabase } from "@/lib/supabase/storage";
 import { Timestamp, type Firestore } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { assertTccAccess } from "@/lib/auth/authorization";
@@ -178,8 +178,8 @@ export async function salvarVersao(
   throw new SubmissaoHttpError(409, "VERSION_CONFLICT", "Outro envio aconteceu ao mesmo tempo.");
 }
 
-// === IMPLEMENTAÇÃO NOVA PARA O VERCEL BLOB ===
-async function salvarVercelBlob(
+// === IMPLEMENTAÇÃO DO STORAGE VIA SUPABASE ===
+async function salvarSupabase(
   entrada: Parameters<typeof salvarVersao>[2]
 ): Promise<VersaoArquivo> {
   const db = requireDb();
@@ -192,12 +192,8 @@ async function salvarVercelBlob(
     const numeroVersao = existentes.docs.reduce((max, d) => Math.max(max, Number(d.data().numeroVersao) || 0), 0) + 1;
     const caminhoBase = caminhoStorage(tccId, entregaId, numeroVersao, arquivo.nomeSeguro);
 
-    // Faz o upload direto para o Vercel Blob com sufixo aleatório (Garante a privacidade)
-    const blob = await put(caminhoBase, arquivo.bytes, {
-      access: process.env.BLOB_ACCESS === "private" ? "private" : "public",
-      addRandomSuffix: true,
-      contentType: arquivo.contentType
-    });
+    // Faz o upload direto para o Supabase Storage
+    const { url } = await uploadParaSupabase(caminhoBase, arquivo.bytes, arquivo.contentType);
 
     const agora = Timestamp.now();
     const versaoId = `${entregaId}__v${numeroVersao}`;
@@ -207,7 +203,7 @@ async function salvarVercelBlob(
     batch.create(db.collection("versoes_arquivo").doc(versaoId), {
       id: versaoId,
       numeroVersao,
-      arquivoUrl: blob.url, // Salvamos a URL direta do Blob
+      arquivoUrl: url,
       dataUpload: agora,
       entrega_id: entregaId,
     });
@@ -229,13 +225,13 @@ async function salvarVercelBlob(
       return {
         id: versaoId,
         numeroVersao,
-        arquivoUrl: blob.url,
+        arquivoUrl: url,
         dataUpload: agora.toDate().toISOString(),
         entrega_id: entregaId,
       };
     } catch (error) {
-      // Se houver conflito no banco (dois salvando v1 juntos), apaga do Blob e tenta v2
-      await del(blob.url).catch(() => {});
+      // Se houver conflito no banco (dois salvando v1 juntos), apaga do Supabase e tenta v2
+      await removerDoSupabase(caminhoBase).catch(() => {});
       if (codigoDe(error) === 6) continue;
       throw error;
     }
@@ -244,12 +240,12 @@ async function salvarVercelBlob(
   throw new SubmissaoHttpError(409, "VERSION_CONFLICT", "Outro envio aconteceu ao mesmo tempo. Tente novamente.");
 }
 
-// Injeta o salvamento via Vercel Blob como padrão da rota
+// Injeta o salvamento via Supabase Storage como padrão da rota
 const defaultDependencies: SubmissaoRouteDependencies = {
   getSession: getAuthenticatedSession,
   getTcc: (tccId, session) => getTccAccessRecord(tccId, session),
   getMarcoEEntrega: getMarcoEEntregaFirestore,
-  salvar: salvarVercelBlob, 
+  salvar: salvarSupabase, 
   agora: () => Date.now(),
 };
 

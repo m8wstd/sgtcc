@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { put } from "@vercel/blob";
+import { uploadParaSupabase } from "@/lib/supabase/storage";
 import { requireSessao } from "@/lib/auth/server-session";
 import { adminDb } from "@/lib/firebase/admin";
 import { assertTccAccess } from "@/lib/auth/authorization";
@@ -65,14 +65,11 @@ export async function POST(
     let urlFinal = "#";
     try {
       const buffer = Buffer.from(await arquivo.arrayBuffer());
-      const caminhoBlob = `materiais/${tccId}/${marcoId}/${Date.now()}-${nomeOriginal.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const blob = await put(caminhoBlob, buffer, {
-        access: "public",
-        addRandomSuffix: true,
-      });
-      urlFinal = blob.url;
-    } catch (blobErr) {
-      console.warn("Aviso ao fazer upload para Vercel Blob (salvando metadados):", blobErr);
+      const caminhoStorage = `materiais/${tccId}/${marcoId}/${Date.now()}-${nomeOriginal.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const { url } = await uploadParaSupabase(caminhoStorage, buffer, arquivo.type || "application/octet-stream");
+      urlFinal = url;
+    } catch (storageErr) {
+      console.warn("Aviso ao fazer upload para Supabase Storage (salvando metadados):", storageErr);
     }
 
     const agoraIso = new Date().toLocaleDateString("pt-BR") + " às " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
