@@ -283,7 +283,10 @@ export async function getPainelTcc(sessao: AuthenticatedSession, tccId: string):
       entrega,
       statusEfetivo: statusFinal,
       versoes: versoes
-        .filter((v) => v.entrega_id === entrega?.id && /^https:\/\/[^/]+\.(public|private)\.blob\.vercel-storage\.com\//i.test(v.arquivoUrl))
+        .filter((v) => v.entrega_id === entrega?.id && (
+          v.arquivoUrl.includes(".supabase.co/storage/v1/object/public/") ||
+          /^https:\/\/[^/]+\.(public|private)\.blob\.vercel-storage\.com\//i.test(v.arquivoUrl)
+        ))
         .sort((a, b) => b.numeroVersao - a.numeroVersao),
       feedbacks: feedbacks
         .filter((f) => f.entrega_id === entrega?.id)
@@ -347,7 +350,10 @@ async function versoesFinais(tccIds: string[]): Promise<Map<string, VersaoFinal>
   const entregas = (await emLotes<Entrega>("entregas", "tcc_id", tccIds)).filter(
     (e) => e.marco_id === MARCO_ENTREGA_FINAL,
   );
-  const versoes = (await emLotes<VersaoArquivo>("versoes_arquivo", "entrega_id", entregas.map((e) => e.id))).filter((v) => /^https:\/\/[^/]+\.(public|private)\.blob\.vercel-storage\.com\//i.test(v.arquivoUrl));
+  const versoes = (await emLotes<VersaoArquivo>("versoes_arquivo", "entrega_id", entregas.map((e) => e.id))).filter((v) =>
+    v.arquivoUrl.includes(".supabase.co/storage/v1/object/public/") ||
+    /^https:\/\/[^/]+\.(public|private)\.blob\.vercel-storage\.com\//i.test(v.arquivoUrl)
+  );
   const resultado = new Map<string, VersaoFinal>();
   for (const entrega of entregas) {
     const ultima = versoes

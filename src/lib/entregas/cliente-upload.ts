@@ -9,7 +9,7 @@ async function tokenCsrf() {
   return json.csrfToken;
 }
 
-/** Reutiliza o fluxo original do projeto: POST multipart -> Vercel Blob -> Firestore. */
+/** Reutiliza o fluxo original do projeto: POST multipart -> Supabase Storage -> Firestore. */
 export async function enviarArquivoTcc(tccId: string, marcoId: string, arquivo: File) {
   const validacao = validarMetadadosArquivo(arquivo.name, arquivo.size);
   if (!validacao.ok) throw new Error(validacao.mensagem);
